@@ -1,0 +1,13 @@
+# One-click deploy on Render: https://render.com/deploy?repo=https://github.com/mcgillpreston-glitch/PlasticBattle
+services:
+  - type: web
+    name: plastic-front
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev && node build.js
+    startCommand: node server/server.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

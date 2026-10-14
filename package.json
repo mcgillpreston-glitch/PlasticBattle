@@ -1,14 +1,23 @@
 {
   "name": "plastic-front",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
-  "description": "Plastic Front: an all-ARAM toy-soldier MOBA playtest in the browser.",
+  "description": "Plastic Front: an all-ARAM toy-soldier MOBA with real-time online PvP.",
   "scripts": {
     "build": "node build.js",
+    "start": "node server/server.js",
+    "dev": "node build.js && node server/server.js",
     "test": "node build.js && node tests/playtest-harness.js \"$PWD/index.html\" \"$PWD/tests/out\" 240 2",
+    "test:online": "node build.js && node tests/online-test.js",
     "visual": "node build.js && node tests/visual-check.js \"$PWD/index.html\" \"$PWD/tests/out\""
   },
   "devDependencies": {
     "playwright": "^1.48.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
   }
 }

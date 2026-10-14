@@ -158,6 +158,37 @@ h1 { font-size: 40px; } h2 { font-size: 30px; }
 .sbt .hp { display: inline-block; width: 54px; height: 5px; background: #0B0A08; vertical-align: middle; margin-left: 6px; }
 .sbt .hp i { display: block; height: 100%; }
 .sbfoot { font-size: 12px; font-family: var(--type); }
+
+.panel { display: flex; flex-direction: column; gap: 14px; }
+.modeTabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); }
+.modeTabs button { background: none; border: none; border-bottom: 3px solid transparent; color: var(--muted); font-family: var(--display); font-size: 16px; letter-spacing: 1px; padding: 6px 16px 8px; cursor: pointer; min-height: 40px; }
+.modeTabs button.on { color: var(--khaki); border-bottom-color: var(--tanHi); }
+.field.col { flex-direction: column; align-items: flex-start; gap: 4px; }
+.field input { background: var(--panel2); color: var(--khaki); border: 1px solid var(--line); padding: 8px 10px; font-family: var(--body); font-size: 16px; min-height: 40px; }
+.field input.code { width: 6.5em; text-transform: uppercase; letter-spacing: 4px; font-family: var(--display); }
+.field input.wide { width: min(420px, 70vw); font-size: 14px; }
+#oName { width: min(280px, 80vw); }
+.srv summary { cursor: pointer; color: var(--muted); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
+.srv .actions { margin-top: 8px; }
+.status { font-family: var(--type); font-size: 13px; min-height: 1.4em; }
+.lobbyHead { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.codeBig { font-family: var(--display); letter-spacing: 6px; color: var(--tanHi); }
+.lobbyTeams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.lteam { border-left: 4px solid var(--muted); background: rgba(0,0,0,0.22); padding: 8px 10px; min-width: 0; }
+.lteam.g { border-left-color: var(--greenHi); } .lteam.t { border-left-color: var(--tan); }
+.lteam h3 { margin: 0 0 6px; font-family: var(--display); font-weight: 400; font-size: 18px; letter-spacing: 1px; }
+.lteam.g h3 { color: var(--greenHi); } .lteam.t h3 { color: var(--tanHi); }
+.lteam ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.lteam li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; background: rgba(214,203,170,0.05); min-height: 38px; font-size: 14px; }
+.lteam li img { width: 24px; height: 29px; flex: none; }
+.lteam li .ln { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lteam li .lh { color: var(--muted); font-size: 13px; }
+.lteam li.me { background: rgba(214,203,170,0.14); }
+.lteam li.bot { color: var(--muted); font-family: var(--type); font-size: 12px; }
+#lFig { width: 160px; height: 192px; background: #23221B; border: 1px solid var(--line); flex: none; }
+.lMe { flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+body.online .cheat { display: none !important; }
+@media (max-width: 760px) { .lobbyTeams { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
   #feed, #squad, #help { display: none; }
   #dev { width: 200px; }
@@ -176,7 +207,7 @@ h1 { font-size: 40px; } h2 { font-size: 30px; }
 
   <div id="score" class="hud plate" aria-live="off">
     <div class="side g">GREEN <span class="num" id="kg">0</span></div>
-    <div class="mid"><div class="clock" id="clock">0:00</div><div class="forts" id="forts">POSITIONS 4 · 4</div></div>
+    <div class="mid"><div class="clock" id="clock">0:00</div><div class="forts" id="forts">POSITIONS 4 · 4</div><div class="forts" id="pingEl" hidden></div></div>
     <div class="side t"><span class="num" id="kt">0</span> TAN</div>
   </div>
   <button type="button" id="sbBtn" class="hud plate" aria-label="Show scoreboard">Tab · Scoreboard</button>
@@ -188,15 +219,15 @@ h1 { font-size: 40px; } h2 { font-size: 30px; }
     <div class="body">
       <label><input type="checkbox" id="dRanges"> Show weapon ranges</label>
       <label><input type="checkbox" id="dCol"> Show collision and routes</label>
-      <label><input type="checkbox" id="dGod"> God mode (you)</label>
-      <label><input type="checkbox" id="dNoCd"> No cooldowns (you)</label>
-      <label><input type="checkbox" id="dPassive"> Tan holds fire</label>
+      <label class="cheat"><input type="checkbox" id="dGod"> God mode (you)</label>
+      <label class="cheat"><input type="checkbox" id="dNoCd"> No cooldowns (you)</label>
+      <label class="cheat"><input type="checkbox" id="dPassive"> Tan holds fire</label>
       <label><input type="checkbox" id="dSound" checked> Sound</label>
-      <label><input type="checkbox" id="dPause"> Pause</label>
-      <label class="field">Game speed
+      <label class="cheat"><input type="checkbox" id="dPause"> Pause</label>
+      <label class="field cheat">Game speed
         <select id="dSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
       </label>
-      <div class="row">
+      <div class="row cheat">
         <button type="button" id="bWave">Spawn wave</button>
         <button type="button" id="bLvl">+1 level</button>
         <button type="button" id="bKill">Drop Tan heroes</button>
@@ -231,25 +262,75 @@ h1 { font-size: 40px; } h2 { font-size: 30px; }
 
   <div id="draft" class="overlay">
     <div class="card plate">
-      <div class="eyebrow">ARAM · The Sunken Road · Playtest build</div>
-      <h1>Roll Call</h1>
-      <div class="draftRow">
-        <canvas id="draftFig" width="400" height="480"></canvas>
-        <div id="draftInfo">
-          <h2 id="dName">Bazooka</h2>
-          <div class="chips"><span class="chip" id="dRole">Burst</span><span class="chip tan" id="dRange">400 range</span></div>
-          <div class="dossier" id="dKit"></div>
-          <div class="actions">
-            <button type="button" class="big alt" id="shake">Request reassignment (1)</button>
-            <label class="field">Squads
-              <select id="squadSize"><option value="1">1 v 1</option><option value="3" selected>3 v 3</option><option value="5">5 v 5</option></select>
-            </label>
-            <button type="button" class="big go" id="deploy">Deploy</button>
+      <div class="modeTabs" role="tablist" aria-label="Game mode">
+        <button type="button" role="tab" id="tabBots" class="on" aria-selected="true">Vs bots</button>
+        <button type="button" role="tab" id="tabOnline" aria-selected="false">Online PvP</button>
+      </div>
+      <div id="botsPanel" class="panel">
+        <div class="eyebrow">ARAM · The Sunken Road · Offline vs bots</div>
+        <h1>Roll Call</h1>
+        <div class="draftRow">
+          <canvas id="draftFig" width="400" height="480"></canvas>
+          <div id="draftInfo">
+            <h2 id="dName">Bazooka</h2>
+            <div class="chips"><span class="chip" id="dRole">Burst</span><span class="chip tan" id="dRange">400 range</span></div>
+            <div class="dossier" id="dKit"></div>
+            <div class="actions">
+              <button type="button" class="big alt" id="shake">Request reassignment (1)</button>
+              <label class="field">Squads
+                <select id="squadSize"><option value="1">1 v 1</option><option value="3" selected>3 v 3</option><option value="5">5 v 5</option></select>
+              </label>
+              <button type="button" class="big go" id="deploy">Deploy</button>
+            </div>
           </div>
         </div>
+        <div class="muted">Test mode: pick any figure directly.</div>
+        <div class="pickGrid" id="pickGrid"></div>
       </div>
-      <div class="muted">Test mode: pick any figure directly.</div>
-      <div class="pickGrid" id="pickGrid"></div>
+      <div id="onlinePanel" class="panel" hidden>
+        <div class="eyebrow">Online PvP · Real time · Bots fill empty slots</div>
+        <h1>Join the Line</h1>
+        <label class="field col" for="oName">Callsign <input id="oName" maxlength="16" autocomplete="nickname" placeholder="Sarge"></label>
+        <div class="actions">
+          <button type="button" class="big go" id="oQuick">Quick match</button>
+          <span class="muted">or</span>
+          <label class="field">Size <select id="oSize"><option value="1">1 v 1</option><option value="3" selected>3 v 3</option><option value="5">5 v 5</option></select></label>
+          <button type="button" class="big alt" id="oCreate">Create room</button>
+        </div>
+        <div class="actions">
+          <label class="field" for="oCode">Room code <input id="oCode" maxlength="4" autocomplete="off" placeholder="ABCD" class="code"></label>
+          <button type="button" class="big alt" id="oJoin">Join room</button>
+        </div>
+        <details id="oSrv" class="srv"><summary>Server</summary>
+          <div class="actions"><label class="field" for="oServer">Address <input id="oServer" placeholder="wss://your-server.onrender.com/ws" class="wide"></label><button type="button" class="btn" id="oServerSave">Save</button></div>
+        </details>
+        <div class="muted status" id="oStatus" role="status">Pick a callsign, then quick match, create a room, or join with a code.</div>
+      </div>
+      <div id="lobbyPanel" class="panel" hidden>
+        <div class="lobbyHead">
+          <div><div class="eyebrow" id="lMeta">Room</div><h1>Room <span id="lCode" class="codeBig">----</span></h1></div>
+          <div class="actions"><button type="button" class="btn" id="lCopy">Copy invite link</button><button type="button" class="btn" id="lLeave">Leave room</button></div>
+        </div>
+        <div class="lobbyTeams">
+          <section class="lteam g"><h3>Green Army</h3><ol id="lTeam0"></ol></section>
+          <section class="lteam t"><h3>Tan Army</h3><ol id="lTeam1"></ol></section>
+        </div>
+        <div class="draftRow">
+          <canvas id="lFig" width="240" height="288"></canvas>
+          <div class="lMe">
+            <h2 id="lHero">-</h2>
+            <div class="chips"><span class="chip" id="lRole"></span><span class="chip tan" id="lRange"></span></div>
+            <div class="dossier" id="lKit"></div>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" class="big alt" id="lReroll">Request reassignment (1)</button>
+          <button type="button" class="btn" id="lSwitch">Switch team</button>
+          <label class="field">Size <select id="lSize"><option value="1">1 v 1</option><option value="3">3 v 3</option><option value="5">5 v 5</option></select></label>
+          <button type="button" class="big go" id="lStart">Start match</button>
+        </div>
+        <div class="muted status" id="lStatus" role="status"></div>
+      </div>
     </div>
   </div>
 

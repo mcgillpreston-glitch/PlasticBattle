@@ -1,3 +1,4 @@
+/* Browser only: terrain, units, effects, post-processing, minimap. */
 
 /* ---------------- Rendering ---------------- */
 var cv = document.getElementById('game'), ctx = cv.getContext('2d');
@@ -102,13 +103,13 @@ function draw() {
   [0, 1].forEach(function (t) { var fp = fountain(t); ctx.fillStyle = t === 0 ? 'rgba(94,138,44,0.14)' : 'rgba(201,166,107,0.16)'; ell(ctx, fp.x, fp.y, 330, 330); ctx.fill(); });
   G.fx.forEach(function (f) { if (f.k === 'scorch' || f.k === 'glow' || f.k === 'castring') drawFx(f); });
   G.crates.forEach(function (c) { if (c.up) drawCrate(c.x, c.y); else { ctx.strokeStyle = 'rgba(20,19,15,0.4)'; ctx.setLineDash([4, 4]); ctx.strokeRect(c.x - 16, c.y - 16, 32, 32); ctx.setLineDash([]); } });
-  G.mines.forEach(function (m) { if (m.team !== 0 && m.arm <= 0 && dist(m, G.player) > 200) return; ctx.fillStyle = m.arm > 0 ? '#6B6B60' : '#3A3A30'; ell(ctx, m.x, m.y, 16, 8); ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = '#B4432E'; ell(ctx, m.x, m.y - 3, 3, 3); ctx.fill(); });
+  G.mines.forEach(function (m) { if (m.team !== MYTEAM && m.arm <= 0 && dist(m, G.player) > 200) return; ctx.fillStyle = m.arm > 0 ? '#6B6B60' : '#3A3A30'; ell(ctx, m.x, m.y, 16, 8); ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = '#B4432E'; ell(ctx, m.x, m.y - 3, 3, 3); ctx.fill(); });
   G.lobs.forEach(function (l) { if (l.single) return; var p = Math.min(1, l.t / l.delay); ctx.strokeStyle = l.team === 0 ? 'rgba(157,180,100,0.8)' : 'rgba(224,112,63,0.85)'; ctx.lineWidth = 3; ell(ctx, l.x, l.y, l.r, l.r * 0.6); ctx.stroke(); ctx.fillStyle = l.team === 0 ? 'rgba(157,180,100,0.18)' : 'rgba(224,112,63,0.2)'; ell(ctx, l.x, l.y, l.r * p, l.r * 0.6 * p); ctx.fill(); });
   if (opts.ranges) {
     G.structs.forEach(function (s) { if (s.dead || s.kind === 'depot') return; ctx.strokeStyle = 'rgba(224,112,63,0.6)'; ctx.lineWidth = 2; ctx.setLineDash([10, 8]); ell(ctx, s.x, s.y, s.range, s.range); ctx.stroke(); ctx.setLineDash([]); });
     G.units.forEach(function (u) { if (u.kind !== 'hero' || u.dead) return; ctx.strokeStyle = u.team === 0 ? 'rgba(157,180,100,0.5)' : 'rgba(224,200,144,0.5)'; ctx.lineWidth = 2; ell(ctx, u.x, u.y, aaRange(u), aaRange(u)); ctx.stroke(); });
   } else if (G.player && !G.player.dead) {
-    G.structs.forEach(function (s) { if (s.dead || s.team === 0 || s.kind === 'depot') return; var d = dist(s, G.player); if (d < s.range + 160) { ctx.strokeStyle = 'rgba(224,112,63,' + clamp((s.range + 160 - d) / 160, 0, 0.8) + ')'; ctx.lineWidth = 3; ctx.setLineDash([12, 8]); ell(ctx, s.x, s.y, s.range, s.range); ctx.stroke(); ctx.setLineDash([]); } });
+    G.structs.forEach(function (s) { if (s.dead || s.team === MYTEAM || s.kind === 'depot') return; var d = dist(s, G.player); if (d < s.range + 160) { ctx.strokeStyle = 'rgba(224,112,63,' + clamp((s.range + 160 - d) / 160, 0, 0.8) + ')'; ctx.lineWidth = 3; ctx.setLineDash([12, 8]); ell(ctx, s.x, s.y, s.range, s.range); ctx.stroke(); ctx.setLineDash([]); } });
   }
   if (opts.col) {
     ctx.lineCap = 'round';
@@ -131,13 +132,14 @@ function draw() {
   var items = [];
   G.structs.forEach(function (s) { items.push({ y: s.y, f: function () { drawStruct(s); } }); });
   PROPS.forEach(function (p) { items.push({ y: p.y, f: function () { drawProp(p); } }); });
-  G.units.forEach(function (u) { if (u.dead && u.deathT > 1.4) return; if (!u.dead && !visibleTo(u, 0)) return; items.push({ y: u.y, f: function () { drawUnit(u); } }); });
+  G.units.forEach(function (u) { if (u.dead && u.deathT > 1.4) return; if (!u.dead && !visibleTo(u, MYTEAM)) return; items.push({ y: u.y, f: function () { drawUnit(u); } }); });
   items.sort(function (a, b) { return a.y - b.y; });
   items.forEach(function (it) { it.f(); });
   BRUSH.forEach(function (b, i) { drawThicket(b, i); });
   G.proj.forEach(function (p) {
     var pa = Math.atan2(p.vy, p.vx);
     if (p.kind === 'rocket') {
+      if (Math.random() < 0.6) addFx({ k: 'smoke', x: p.x, y: p.y, t: 0, dur: 0.5 });
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(pa);
       var fl = ctx.createRadialGradient(-22, 0, 1, -22, 0, 26); fl.addColorStop(0, 'rgba(255,230,150,0.95)'); fl.addColorStop(1, 'rgba(255,140,40,0)'); ctx.fillStyle = fl; ell(ctx, -26, 0, 26, 12); ctx.fill();
       ctx.fillStyle = '#3F4A2A'; ctx.fillRect(-16, -6, 32, 12); ctx.fillStyle = '#596640'; ctx.beginPath(); ctx.moveTo(16, -6); ctx.lineTo(26, 0); ctx.lineTo(16, 6); ctx.closePath(); ctx.fill();
@@ -159,7 +161,7 @@ function draw() {
   G.fx.forEach(function (f) { if (f.k !== 'scorch' && f.k !== 'glow' && f.k !== 'castring' && f.k !== 'callout') drawFx(f); });
   G.structs.forEach(function (s) { if (!s.dead) bar(s.x, s.y - (s.kind === 'hq' ? 178 : s.kind === 'depot' ? 100 : 116), s.kind === 'hq' ? 150 : 110, 9, s.hp / s.maxHp, s.team, targetable(s) ? null : 'locked'); });
   G.units.forEach(function (u) {
-    if (u.dead || !visibleTo(u, 0)) return;
+    if (u.dead || !visibleTo(u, MYTEAM)) return;
     var hh = unitH(u);
     if (u.kind === 'hero') {
       bar(u.x, u.y - hh - 16, 84, 8, u.hp / maxHp(u), u.team, null, u.shield / maxHp(u), u.lvl);
@@ -211,6 +213,7 @@ function drawBracket(t, color, lw, spin) {
   ctx.restore();
 }
 function drawAttackArc(u) {
+  if (u.aaT == null) return;
   var p = 1 - clamp(u.aaT / aaCd(u), 0, 1);
   ctx.strokeStyle = 'rgba(214,203,170,0.85)'; ctx.lineWidth = 3;
   ctx.beginPath(); ctx.ellipse(u.x, u.y + 2, 34, 13, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); ctx.stroke();
@@ -240,7 +243,7 @@ function drawProp(p) {
     ctx.fillStyle = '#4A4538'; ctx.fillRect(-48, -52, 30, 8);
     ctx.fillStyle = '#1C1A14'; ell(ctx, 10, -40, 14, 6); ctx.fill();
     ctx.restore();
-    if (Math.random() < 0.08) fx({ k: 'smoke', x: p.x + rnd(-10, 10), y: p.y - 50, t: 0, dur: 1.6, big: 1 });
+    if (Math.random() < 0.08) addFx({ k: 'smoke', x: p.x + rnd(-10, 10), y: p.y - 50, t: 0, dur: 1.6, big: 1 });
   } else if (p.kind === 'cart') {
     ctx.save(); laneSkew(ctx, p.x, p.y); ctx.rotate(-0.12);
     ctx.fillStyle = '#5F4628'; ctx.fillRect(-42, -34, 84, 26); ctx.strokeStyle = '#2A1E10'; ctx.lineWidth = 2; ctx.strokeRect(-42, -34, 84, 26);
@@ -311,7 +314,7 @@ function drawStruct(s) {
 }
 function drawUnit(u) {
   var alpha = 1;
-  if (u.team === 0 && (isGhost(u) || inBrush(u) >= 0)) alpha = 0.55;
+  if (u.team === MYTEAM && (isGhost(u) || inBrush(u) >= 0)) alpha = 0.55;
   ctx.save(); ctx.globalAlpha = alpha;
   ctx.translate(u.x, u.y);
   var h = unitH(u), veh = u.type === 'tank' || u.type === 'jeep';
@@ -330,7 +333,7 @@ function drawUnit(u) {
   }
   if (u.isPlayer && !u.dead) { ctx.strokeStyle = 'rgba(214,203,170,0.9)'; ctx.lineWidth = 2.5; ctx.setLineDash([8, 6]); ell(ctx, 0, 2, 40, 14); ctx.stroke(); ctx.setLineDash([]); }
   if (u.kind === 'hero' && !u.dead && (u.wind || u.fireT > 0 || u.cone || u.chan)) {
-    ctx.fillStyle = u.team === 0 ? 'rgba(169,196,110,0.35)' : 'rgba(217,83,47,0.35)'; ell(ctx, 0, 2, 34, 12); ctx.fill();
+    ctx.fillStyle = u.team === MYTEAM ? 'rgba(169,196,110,0.35)' : 'rgba(217,83,47,0.35)'; ell(ctx, 0, 2, 34, 12); ctx.fill();
   }
   if (veh) drawVehicle(u);
   else {
@@ -339,7 +342,7 @@ function drawUnit(u) {
     if (u.flashT > 0 && !u.dead) { var fs = sprite(u.pose, u.team, h, u.facing < 0, true); ctx.globalAlpha = alpha * (u.flashT / 0.08) * 0.85; ctx.drawImage(fs.cv, -sp.w / 2, -h * 226 / 240, sp.w, h); ctx.globalAlpha = alpha; }
   }
   if (u.shield > 0 && !u.dead) { ctx.strokeStyle = 'rgba(214,203,170,0.7)'; ctx.lineWidth = 3; ell(ctx, 0, -h * 0.45, 40, h * 0.6); ctx.stroke(); }
-  if (u.burnT > 0 && !u.dead && Math.random() < 0.4) fx({ k: 'flame', x: u.x + rnd(-12, 12), y: u.y - rnd(10, 60), t: 0, dur: 0.3 });
+  if (u.burnT > 0 && !u.dead && Math.random() < 0.4) addFx({ k: 'flame', x: u.x + rnd(-12, 12), y: u.y - rnd(10, 60), t: 0, dur: 0.3 });
   if (u.tagMark && !u.dead) { ctx.fillStyle = '#E0703F'; ell(ctx, 0, -h - 34, 5, 5); ctx.fill(); }
   ctx.restore();
   if (u.slowT > 0 && !u.dead) { ctx.fillStyle = 'rgba(120,170,230,0.45)'; ell(ctx, u.x, u.y + 2, 26, 9); ctx.fill(); }
@@ -363,7 +366,7 @@ function drawVehicle(u) {
     ctx.fillStyle = top; ctx.fillRect(-8, -44, 6, 16); ctx.fillRect(16, -36, 16, 8);
   }
   if (u.flashT > 0 && !u.dead) { ctx.globalAlpha = u.flashT / 0.08 * 0.6; ctx.fillStyle = '#fff'; ctx.fillRect(-36, -44, 72, 46); ctx.globalAlpha = 1; }
-  if (u.dead && Math.random() < 0.3) fx({ k: 'smoke', x: u.x + rnd(-10, 10), y: u.y - 30, t: 0, dur: 1.2, big: 1 });
+  if (u.dead && Math.random() < 0.3) addFx({ k: 'smoke', x: u.x + rnd(-10, 10), y: u.y - 30, t: 0, dur: 1.2, big: 1 });
   ctx.restore();
 }
 function streak(x, y, a, len, w, head, tail) {
@@ -373,11 +376,11 @@ function streak(x, y, a, len, w, head, tail) {
 }
 function drawAimLines() {
   G.units.forEach(function (u) {
-    if (!u.wind || u.dead || u.kind !== 'hero' || !visibleTo(u, 0)) return;
+    if (!u.wind || u.dead || u.kind !== 'hero' || !visibleTo(u, MYTEAM)) return;
     if (aaStyle(u) === 'melee') return;
     var t = u.wind.tgt; if (!t || t.dead) return;
     var k = clamp(u.wind.t / u.wind.dur, 0, 1), m = muzzle(u), ap = aimPoint(t);
-    var col = u.isPlayer ? '242,235,214' : u.team === 0 ? '169,196,110' : '230,90,55';
+    var col = u.isPlayer ? '242,235,214' : u.team === MYTEAM ? '169,196,110' : '230,90,55';
     ctx.strokeStyle = 'rgba(' + col + ',' + (0.2 + 0.65 * k) + ')'; ctx.lineWidth = u.isPlayer ? 2.2 : 1.6; ctx.setLineDash([10, 7]);
     ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(m.x + (ap.x - m.x) * k, m.y + (ap.y - m.y) * k); ctx.stroke(); ctx.setLineDash([]);
     if (u.isPlayer || t.isPlayer) { var rr = 28 - 16 * k; ctx.strokeStyle = 'rgba(' + col + ',' + (0.4 + 0.5 * k) + ')'; ctx.lineWidth = 2; ell(ctx, ap.x, ap.y, rr, rr); ctx.stroke(); }
@@ -451,7 +454,7 @@ function drawMini() {
   mctx.restore();
   G.structs.forEach(function (s) { mctx.fillStyle = s.dead ? '#5A5448' : TEAMC[s.team].ui; var z = s.kind === 'hq' ? 76 : 50; mctx.fillRect(s.x - z / 2, s.y - z / 2, z, z); mctx.strokeStyle = '#2B2619'; mctx.lineWidth = 8; mctx.strokeRect(s.x - z / 2, s.y - z / 2, z, z); });
   if (G.barrage) G.barrage.beams.forEach(function (b) { if (b.x == null) return; mctx.strokeStyle = '#B4432E'; mctx.lineWidth = 10; mctx.beginPath(); mctx.arc(b.x, b.y, G.barrage.r, 0, Math.PI * 2); mctx.stroke(); });
-  G.units.forEach(function (u) { if (u.dead || !visibleTo(u, 0)) return; mctx.fillStyle = u.isPlayer ? '#F5EFD8' : TEAMC[u.team].ui; var z = u.kind === 'hero' ? 46 : 22; mctx.beginPath(); mctx.arc(u.x, u.y, z / 2, 0, Math.PI * 2); mctx.fill(); if (u.kind === 'hero') { mctx.strokeStyle = '#2B2619'; mctx.lineWidth = 8; mctx.stroke(); } });
+  G.units.forEach(function (u) { if (u.dead || !visibleTo(u, MYTEAM)) return; mctx.fillStyle = u.isPlayer ? '#F5EFD8' : TEAMC[u.team].ui; var z = u.kind === 'hero' ? 46 : 22; mctx.beginPath(); mctx.arc(u.x, u.y, z / 2, 0, Math.PI * 2); mctx.fill(); if (u.kind === 'hero') { mctx.strokeStyle = '#2B2619'; mctx.lineWidth = 8; mctx.stroke(); } });
   mctx.strokeStyle = '#2B2619'; mctx.lineWidth = 10; mctx.strokeRect(cam.x - VW / 2 / cam.z, cam.y - VH / 2 / cam.z, VW / cam.z, VH / cam.z);
   mctx.restore();
 }

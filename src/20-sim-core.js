@@ -1,30 +1,32 @@
+/* Shared simulation core: runs in the browser (offline) and on the game server. No DOM access. */
 
-/* ---------------- State ---------------- */
+/* ---------------- State (shared by browser client and game server) ---------------- */
 var G = null, uid = 1;
-var opts = { ranges: false, god: false, nocd: false, passive: false, pause: false, speed: 1, sound: true };
-var cam = { x: 1600, y: 960, z: 0.8, lock: true };
-var mouse = { x: 0, y: 0, wx: 0, wy: 0, inside: false };
-var aimSlot = null, aMovePending = false, hoverT = null;
+var opts = { ranges: false, god: false, nocd: false, passive: false, pause: false, speed: 1, sound: true, col: false };
 
-function newGame(heroIdx, size) {
+/* roster: [{ team, hero, human, name, pid }]; returns G. Used offline and by the server. */
+function simNewGame(roster) {
   uid = 1;
   G = { time: 0, units: [], structs: [], proj: [], lobs: [], mines: [], fx: [], texts: [], kills: [0, 0], nextWave: 3, wave: 0,
-    crates: [], over: false, barrage: null, player: null, feed: [], toastT: 0, hurtT: 0, blockers: [], moveMark: null, rounds: [], shake: 0 };
+    crates: [], over: false, winner: -1, barrage: null, player: null, feed: [], toastT: 0, hurtT: 0, blockers: [], moveMark: null, rounds: [], shake: 0, ev: [] };
+  makeStructs();
+  makeCrates();
+  var slots = [0, 0];
+  roster.forEach(function (r) {
+    var u = addHero(HEROES[r.hero], r.team, !!r.human, slots[r.team]++);
+    if (r.name) u.pname = r.name;
+    if (r.pid != null) u.pid = r.pid;
+    r.uid = u.id;
+  });
+  rebuildBlockers();
+  return G;
+}
+function makeStructs() {
   [[0.33, 'outpost', 1], [0.21, 'outpost', 2], [0.11, 'depot', 3], [0.03, 'hq', 4]].forEach(function (d) {
     addStruct(0, d[0], d[1], d[2]); addStruct(1, 1 - d[0], d[1], d[2]);
   });
-  [[0.40, 95], [0.60, -95], [0.50, 0]].forEach(function (c) { var p = lanePt(c[0], c[1]); G.crates.push({ x: p.x, y: p.y, up: true, t: 0 }); });
-  var pool0 = shuffle(range16().filter(function (i) { return i !== heroIdx; }));
-  var pool1 = shuffle(range16());
-  G.player = addHero(HEROES[heroIdx], 0, true, 0);
-  for (var i = 1; i < size; i++) addHero(HEROES[pool0[i - 1]], 0, false, i);
-  for (var j = 0; j < size; j++) addHero(HEROES[pool1[j]], 1, false, j);
-  rebuildBlockers();
-  var f = fountain(0); cam.x = f.x; cam.y = f.y; cam.lock = true;
-  aimSlot = null; aMovePending = false;
-  buildAbilityBar();
-  toast('Deployed. Field Orders at the CP from level 3', 3);
 }
+function makeCrates() { [[0.40, 95], [0.60, -95], [0.50, 0]].forEach(function (c) { var p = lanePt(c[0], c[1]); G.crates.push({ x: p.x, y: p.y, up: true, t: 0 }); }); }
 function range16() { var a = []; for (var i = 0; i < HEROES.length; i++) a.push(i); return a; }
 function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 function rebuildBlockers() {
@@ -82,22 +84,23 @@ function spawnWave() {
 /* ---------------- Stats ---------------- */
 function lvlMul(u) { return 1 + 0.065 * ((u.lvl || 3) - 3); }
 function sumBuff(u, k) { var s = 0; for (var i = 0; i < u.buffs.length; i++) if (u.buffs[i][k]) s += u.buffs[i][k]; return s; }
-function maxHp(u) { if (u.kind !== 'hero') return u.maxHp; return Math.round((u.spec.hp * (1 + 0.08 * (u.lvl - 3)) + (u.aug.hp || 0)) * (1 + (u.aug.hpMul || 0))); }
+function maxHp(u) { if (u._mh) return u._mh; if (u.kind !== 'hero') return u.maxHp; return Math.round((u.spec.hp * (1 + 0.08 * (u.lvl - 3)) + (u.aug.hp || 0)) * (1 + (u.aug.hpMul || 0))); }
 function moveSpeed(u) {
   if (sumBuff(u, 'root') > 0 || (u.cone && u.cone.root)) return 0;
   var base = u.kind === 'hero' ? u.spec.spd : u.spd;
   var m = 1 + sumBuff(u, 'ms') + ((u.aug && u.aug.ms) || 0);
   return base * m * (1 - (u.slowT > 0 ? u.slowAmt : 0));
 }
-function aaRange(u) { if (u.kind !== 'hero') return u.range; return u.spec.range + sumBuff(u, 'range') + (u.aug.range || 0); }
+function aaRange(u) { if (u._rng) return u._rng; if (u.kind !== 'hero') return u.range; return u.spec.range + sumBuff(u, 'range') + (u.aug.range || 0); }
 function dmgMul(u) { return (u.kind === 'hero' ? lvlMul(u) * (1 + (u.aug.dmg || 0)) : 1) * (1 + sumBuff(u, 'dmgMul')); }
 function aaDmg(u) { if (u.kind !== 'hero') return u.dmg; return (u.spec.dmg + (u.aug.aa || 0)) * dmgMul(u); }
-function aaCd(u) { if (u.kind !== 'hero') return u.acd; return u.spec.acd / (1 + sumBuff(u, 'as') + (u.aug.as || 0)); }
+function aaCd(u) { if (u._acd) return u._acd; if (u.kind !== 'hero') return u.acd; return u.spec.acd / (1 + sumBuff(u, 'as') + (u.aug.as || 0)); }
 function cdMul(u, slot) { var h = (u.aug.haste || 0) + (slot === 'Q' ? (u.aug.cdQ || 0) : 0); return 1 / (1 + h); }
 function heroH(u) { return Math.round(92 * (1 + ((u.aug && u.aug.scale) || 0))); }
 function unitH(u) { return u.kind === 'hero' ? heroH(u) : (u.type === 'tank' ? 44 : u.type === 'jeep' ? 40 : u.h); }
 function isGhost(u) { return sumBuff(u, 'ghost') > 0; }
 function visibleTo(u, team) {
+  if (u._hidden) return false;
   if (u.isStruct || u.team === team) return true;
   if (u.dead) return false;
   if (isGhost(u)) return false;
@@ -132,11 +135,7 @@ function damage(src, tgt, amt, o) {
     if (o.knock && src) { var dx = tgt.x - (o.fx != null ? o.fx : src.x), dy = tgt.y - (o.fy != null ? o.fy : src.y), L = vlen(dx, dy) || 1; tgt.kvx += dx / L * o.knock; tgt.kvy += dy / L * o.knock; }
     if (o.pull && src) { var px = src.x - tgt.x, py = src.y - tgt.y, PL = vlen(px, py) || 1; tgt.kvx += px / PL * 620; tgt.kvy += py / PL * 620; }
     if ((o.burn || (src && src.aug && src.aug.burn && o.ability)) && tgt.kind) { tgt.burnT = 3; tgt.burnDps = 30; tgt.burnSrc = src; }
-    if (!o.tick) { tgt.flashT = 0.08; if (amt > 8 && Math.random() < 0.7) chips(tgt.x, tgt.y - unitH(tgt) * 0.45, tgt.team, 3, 0.6); }
-    if (tgt.isPlayer && !o.tick) { G.hurtT = Math.max(G.hurtT, 0.35); sfx('hit', tgt.x, tgt.y); }
-    else if (src && src.isPlayer && !o.tick) sfx('hit', tgt.x, tgt.y);
   }
-  if (tgt.isStruct && !o.tick) { tgt.flashT = 0.08; chips(tgt.x, tgt.y - 40, tgt.team, 2, 0.5); }
   var dealt = Math.min(amt, Math.max(0, tgt.hp));
   if (src && src.kind === 'hero' && src.team !== tgt.team) { if (tgt.kind === 'hero') src.st.dmgH += dealt; else if (tgt.isStruct) src.st.dmgS += dealt; }
   if (tgt.kind === 'hero') { tgt.st.taken += dealt; if (src && src.kind === 'hero') tgt.dmgBy[src.id] = G.time; }
@@ -146,7 +145,7 @@ function damage(src, tgt, amt, o) {
     if (ls > 0 && !src.dead) { var hl = Math.max(0, Math.min(maxHp(src) - src.hp, amt * ls)); src.hp += hl; src.st.heal += hl; }
     if (tgt.kind === 'hero') { src.aggroT = 2; tgt.lastHit = src; tgt.lastHitT = 8; }
   }
-  if (((src && src.isPlayer) || tgt.isPlayer) && !o.tick) floatText(tgt.x, tgt.y - unitH(tgt) - 10, Math.round(amt), tgt.isPlayer ? '#E0703F' : '#F5EFD8');
+  if (!o.tick) emit('dmg', tgt.id, src ? src.id : 0, Math.round(amt));
   if (o.exec && !tgt.isStruct && tgt.hp > 0 && tgt.hp / (tgt.kind === 'hero' ? maxHp(tgt) : tgt.maxHp) < o.exec) tgt.hp = 0;
   if (tgt.hp <= 0) kill(src, tgt);
 }
@@ -164,7 +163,7 @@ function kill(src, tgt) {
     if (src && src.kind === 'hero') src.st.pos++;
     shakeAt(tgt.x, tgt.y, 9);
     rebuildBlockers();
-    if (tgt.kind === 'hq') endGame(1 - tgt.team);
+    if (tgt.kind === 'hq') { G.over = true; G.winner = 1 - tgt.team; emit('end', G.winner); }
     return;
   }
   chips(tgt.x, tgt.y - 20, tgt.team, tgt.kind === 'hero' ? 16 : 5, 1);
@@ -186,41 +185,36 @@ function kill(src, tgt) {
       var h = G.units.find(function (x) { return String(x.id) === id; });
       if (h && h !== killer && h.team === killer.team) h.st.a++;
     });
-    if (killer.st.streak === 3 || killer.st.streak === 5) feed(killer.name + (killer.st.streak === 3 ? ' is on a tear (3 straight)' : ' is unstoppable (5 straight)'), killer.team === 0 ? 'fg' : 'ft');
+    if (killer.st.streak === 3 || killer.st.streak === 5) feed(nm(killer) + (killer.st.streak === 3 ? ' is on a tear (3 straight)' : ' is unstoppable (5 straight)'), killer.team === 0 ? 'fg' : 'ft');
     G.units.forEach(function (h) { if (h !== killer && h.kind === 'hero' && h.team === killer.team && !h.dead && dist(h, tgt) < 1100) giveXp(h, 90); });
   }
   tgt.dmgBy = {};
-  var by = killer && killer.team !== tgt.team ? killer.name : (src && src.isStruct ? 'an MG nest' : src && src.kind === 'minion' ? 'the line' : 'artillery');
-  feed(by + ' dropped ' + tgt.name, tgt.team === 0 ? 'ft' : 'fg');
-  if (tgt.isPlayer) { toast('KIA. Reinforcing in ' + Math.ceil(tgt.respawn) + 's', 2.5); G.hurtT = 1.2; }
+  var by = killer && killer.team !== tgt.team ? nm(killer) : (src && src.isStruct ? 'an MG nest' : src && src.kind === 'minion' ? 'the line' : 'artillery');
+  feed(by + ' dropped ' + nm(tgt), tgt.team === 0 ? 'ft' : 'fg');
+  emit('kia', tgt.id, Math.ceil(tgt.respawn));
 }
 function giveXp(h, n) {
   h.xp += n;
   while (h.lvl < 18 && h.xp >= xpNeed(h.lvl)) {
     h.xp -= xpNeed(h.lvl);
     var before = maxHp(h); h.lvl++; h.hp += maxHp(h) - before;
-    if (h.isPlayer) { toast('Level ' + h.lvl + (ORDER_LEVELS.indexOf(h.lvl) >= 0 ? ' · Field Orders waiting at the CP' : ''), 2); sfx('ui'); }
+    emit('lvl', h.id, h.lvl);
   }
 }
 function xpNeed(l) { return 160 + 55 * l; }
 function ordersOwed(u) { var n = 0; ORDER_LEVELS.forEach(function (l) { if (u.lvl >= l) n++; }); return n - u.ordersDone; }
 function atBase(u) { return u.dead || dist(u, fountain(u.team)) < 360; }
 
-/* ---------------- Effects ---------------- */
-function fx(o) { if (G.fx.length < 600) G.fx.push(o); }
-var REDUCED = false; try { REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
-function shakeAt(x, y, amt) { if (REDUCED || !G) return; var k = clamp(1 - vlen(x - cam.x, y - cam.y) / 1000, 0, 1); G.shake = Math.max(G.shake || 0, amt * k); }
-function floatText(x, y, txt, color) { if (G.texts.length > 80) return; G.texts.push({ x: x + rnd(-10, 10), y: y, txt: String(txt), color: color, t: 0 }); }
-function chips(x, y, team, n, power) {
-  for (var i = 0; i < n; i++) { var a = rnd(0, Math.PI * 2), s = rnd(80, 260) * power; fx({ k: 'chip', x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 120, t: 0, dur: rnd(0.4, 0.9), c: TEAMC[team].c2, rot: rnd(0, 6) }); }
-}
-function feed(txt, cls) {
-  G.feed.unshift({ txt: fmtTime(G.time) + '  ' + txt, cls: cls, t: 8 });
-  if (G.feed.length > 5) G.feed.length = 5;
-  renderFeed();
-}
-var toastEl = document.getElementById('toast');
-function toast(txt, dur) { toastEl.textContent = txt; G.toastT = dur || 2; }
+/* ---------------- Events: the sim never draws. The client turns these into visuals and sound. ---------------- */
+function emit() { var a = Array.prototype.slice.call(arguments); G.ev.push(a); if (G.ev.length > 4000) G.ev.splice(0, 2000); }
+function fx(o) { if (o.u) { o.uid = o.u.id; delete o.u; } emit('fx', o); }
+function sfx(kind, x, y) { emit('sfx', kind, x == null ? null : Math.round(x), y == null ? null : Math.round(y)); }
+function chips(x, y, team, n, power) { emit('chips', Math.round(x), Math.round(y), team, n, power); }
+function feed(txt, cls) { emit('feed', G.time, txt, cls); }
+function toast(txt, dur, toUid) { emit('toast', txt, dur || 2, toUid || 0); }
+function shakeAt(x, y, amt) { emit('shake', Math.round(x), Math.round(y), amt); }
+function anim(u, k) { emit('a', u.id, k); }
+function nm(u) { return u.pname ? u.pname + ' (' + u.name + ')' : u.name; }
 function muzzle(u) {
   var h = unitH(u), s = h / 92, k = u.pose || '';
   var dx = 36, dy = -52;
@@ -241,7 +235,7 @@ function coreOf(b, x, y) {
   return { x: b.ax + dx * t, y: b.ay + dy * t };
 }
 function surfDist(b, x, y) { var c = coreOf(b, x, y); return vlen(x - c.x, y - c.y) - b.r; }
-function inLane(x, y) { var q = laneProj({ x: x, y: y }); return q.t >= T_MIN - 1e-4 && q.t <= T_MAX + 1e-4 && Math.abs(q.off) <= LANE_OFF + 0.5; }
+function inLane(x, y) { var dx = x - MAP.A.x, dy = y - MAP.A.y, t = (dx * LD.x + dy * LD.y) / LLEN, off = dx * LP.x + dy * LP.y; return t >= T_MIN - 1e-4 && t <= T_MAX + 1e-4 && off <= LANE_OFF + 0.5 && off >= -LANE_OFF - 0.5; }
 function pointClear(x, y, r) {
   if (!inLane(x, y)) return false;
   var bl = G.blockers; for (var i = 0; i < bl.length; i++) if (surfDist(bl[i], x, y) < r) return false;
@@ -250,7 +244,8 @@ function pointClear(x, y, r) {
 function segPtDist(px, py, ax, ay, bx, by) {
   var dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy, t = L2 ? ((px - ax) * dx + (py - ay) * dy) / L2 : 0;
   t = t < 0 ? 0 : t > 1 ? 1 : t;
-  return vlen(px - ax - dx * t, py - ay - dy * t);
+  var qx = px - ax - dx * t, qy = py - ay - dy * t;
+  return Math.sqrt(qx * qx + qy * qy);
 }
 function orient(ax, ay, bx, by, cx, cy) { return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax); }
 function segsCross(a1x, a1y, a2x, a2y, b1x, b1y, b2x, b2y) {
@@ -259,9 +254,10 @@ function segsCross(a1x, a1y, a2x, a2y, b1x, b1y, b2x, b2y) {
 }
 function segClear(ax, ay, bx, by, r) {
   if (!inLane(ax, ay) || !inLane(bx, by)) return false;
-  var bl = G.blockers;
+  var bl = G.blockers, minx = ax < bx ? ax : bx, maxx = ax < bx ? bx : ax, miny = ay < by ? ay : by, maxy = ay < by ? by : ay;
   for (var i = 0; i < bl.length; i++) {
-    var o = bl[i], d;
+    var o = bl[i], d, ext = o.r + r + (o.h || 0);
+    if (o.x + ext < minx || o.x - ext > maxx || o.y + ext < miny || o.y - ext > maxy) continue;
     if (o.ax == null) d = segPtDist(o.x, o.y, ax, ay, bx, by);
     else d = segsCross(ax, ay, bx, by, o.ax, o.ay, o.bx, o.by) ? 0 : Math.min(segPtDist(ax, ay, o.ax, o.ay, o.bx, o.by), segPtDist(bx, by, o.ax, o.ay, o.bx, o.by), segPtDist(o.ax, o.ay, ax, ay, bx, by), segPtDist(o.bx, o.by, ax, ay, bx, by));
     if (d < o.r + r) return false;
@@ -370,7 +366,6 @@ function stepToward(u, x, y, step, stopAt) {
   if (!u.path) s = Math.min(s, d - stopAt);
   if (Math.abs(ex) > 3) u.facing = ex < 0 ? -1 : 1;
   u.x += ex / ed * s; u.y += ey / ed * s;
-  u.walk += s; u.movedT = 0.12;
   return false;
 }
 function watchdog(u, dt, want, spd) {
@@ -385,18 +380,32 @@ function watchdog(u, dt, want, spd) {
   } else u.wdN = 0;
   u.wdT = 0; u.wdX = u.x; u.wdY = u.y;
 }
+function clampInPlace(u) {
+  var dx = u.x - MAP.A.x, dy = u.y - MAP.A.y, t = (dx * LD.x + dy * LD.y) / LLEN, off = dx * LP.x + dy * LP.y;
+  var ct = t < T_MIN ? T_MIN : t > T_MAX ? T_MAX : t, co = off < -LANE_OFF ? -LANE_OFF : off > LANE_OFF ? LANE_OFF : off;
+  if (ct === t && co === off) return;
+  u.x = MAP.A.x + LD.x * LLEN * ct + LP.x * co; u.y = MAP.A.y + LD.y * LLEN * ct + LP.y * co;
+}
 function keepInWorld(u) {
   var bl = G.blockers;
   for (var it = 0; it < 3; it++) {
-    var c = clampLane(u); u.x = c.x; u.y = c.y;
+    clampInPlace(u);
     var moved = false;
     for (var i = 0; i < bl.length; i++) {
-      var o = bl[i], k = coreOf(o, u.x, u.y), dx = u.x - k.x, dy = u.y - k.y, d = vlen(dx, dy), m = o.r + u.r;
-      if (d < m) { if (d < 0.01) { dx = LP.x; dy = LP.y; d = 1; } u.x = k.x + dx / d * m; u.y = k.y + dy / d * m; moved = true; }
+      var o = bl[i], m = o.r + u.r, cx = o.x, cy = o.y;
+      if (o.ax != null) {
+        var ex = o.bx - o.ax, ey = o.by - o.ay, t = ((u.x - o.ax) * ex + (u.y - o.ay) * ey) / (ex * ex + ey * ey);
+        t = t < 0 ? 0 : t > 1 ? 1 : t; cx = o.ax + ex * t; cy = o.ay + ey * t;
+      }
+      var dx = u.x - cx, dy = u.y - cy;
+      if (dx > m || dx < -m || dy > m || dy < -m) continue;
+      var d2 = dx * dx + dy * dy; if (d2 >= m * m) continue;
+      var d = Math.sqrt(d2); if (d < 0.01) { dx = LP.x; dy = LP.y; d = 1; }
+      u.x = cx + dx / d * m; u.y = cy + dy / d * m; moved = true;
     }
     if (!moved) return;
   }
-  var c2 = clampLane(u); u.x = c2.x; u.y = c2.y;
+  clampInPlace(u);
   if (!pointClear(u.x, u.y, u.r - 2)) { ensureNav(); var k2 = nearestWalk(navCell(u.x, u.y), u.r + 1, u.x, u.y); if (k2 >= 0) { u.x = NAV.px[k2]; u.y = NAV.py[k2]; u.path = null; } }
 }
 function dashCut(u, to) {
@@ -426,7 +435,7 @@ function cast(u, slot, aim) {
       G.proj.push({ x: mz.x, y: mz.y, vx: dir.x * ab.speed, vy: dir.y * ab.speed, life: ab.range / ab.speed, team: u.team, owner: u, w: ab.w || 20,
         dmg: ab.dmg * dm, aoe: ab.aoe || 0, pierce: ab.pierce, slow: ab.slow, knock: ab.knock, pull: ab.pull, exec: ab.exec, burn: ab.burn, rocket: ab.rocket, hit: {}, kind: ab.rocket ? 'rocket' : 'shot' });
       fx({ k: 'muzzle', x: mz.x, y: mz.y, a: Math.atan2(dir.y, dir.x), t: 0, dur: 0.08, s: 1.4 });
-      u.recoilT = 0.12;
+      anim(u, 'f');
       sfx(ab.rocket ? 'rocket' : 'rifle', u.x, u.y);
       break;
     case 'jack':
@@ -444,7 +453,7 @@ function cast(u, slot, aim) {
         G.lobs.push({ x: c.x, y: c.y, sx: u.x, sy: u.y - 50, t: 0, delay: ab.delay + (ab.line ? i * 0.12 : n > 1 ? i * 0.1 : 0), r: ab.r, dmg: ab.dmg * dm, team: u.team, owner: u, slow: ab.slow, smul: ab.smul, smoke: ab.dmg === 0 });
       }
       sfx('shell', u.x, u.y);
-      u.recoilT = 0.1;
+      anim(u, 'f');
       break; }
     case 'nova':
       fx({ k: 'ring', x: u.x, y: u.y, r: ab.r, t: 0, dur: 0.4, c: TEAMC[u.team].hi });
@@ -482,7 +491,7 @@ function cast(u, slot, aim) {
       break;
     case 'cone':
       u.cone = { ab: ab, t: 0, dir: dir, tick: 0, dm: dm, root: ab.dur > 0.2 };
-      if (ab.dur <= 0.1) { coneHit(u, ab, dir, ab.dmg * dm); u.cone.t = ab.dur; fx({ k: 'muzzle', x: mz.x, y: mz.y, a: Math.atan2(dir.y, dir.x), t: 0, dur: 0.1, s: 2 }); u.recoilT = 0.15; sfx('cannon', u.x, u.y); }
+      if (ab.dur <= 0.1) { coneHit(u, ab, dir, ab.dmg * dm); u.cone.t = ab.dur; fx({ k: 'muzzle', x: mz.x, y: mz.y, a: Math.atan2(dir.y, dir.x), t: 0, dur: 0.1, s: 2 }); anim(u, 'f'); sfx('cannon', u.x, u.y); }
       else sfx(ab.n === 'Sweep' ? 'flame' : 'mg', u.x, u.y);
       break;
     case 'chan':
@@ -504,7 +513,7 @@ function cast(u, slot, aim) {
     var main = 'QWER'.indexOf(slot) >= 0;
     if (main) fx({ k: 'callout', u: u, txt: ab.n.toUpperCase() + (slot === 'R' ? '!' : ''), t: 0, dur: slot === 'R' ? 1.3 : 0.95, ult: slot === 'R' });
     fx({ k: 'castring', x: u.x, y: u.y, t: 0, dur: slot === 'R' ? 0.55 : 0.35, c: TEAMC[u.team].hi, ult: slot === 'R' });
-    u.fireT = Math.max(u.fireT || 0, 0.16);
+    anim(u, 'c');
     if (slot === 'R') shakeAt(u.x, u.y, 4);
   }
   var full = ab.cd * (slot === 'D' || slot === 'F' ? 1 : cdMul(u, slot));
