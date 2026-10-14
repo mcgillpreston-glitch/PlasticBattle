@@ -72,6 +72,7 @@ function addMinion(team, type) {
 }
 function spawnWave() {
   G.wave++;
+  emit('wave', G.wave);
   [0, 1].forEach(function (team) {
     var enemyDepot = G.structs.find(function (s) { return s.team !== team && s.kind === 'depot'; });
     for (var i = 0; i < 3; i++) addMinion(team, 'melee');
@@ -153,9 +154,9 @@ function kill(src, tgt) {
   if (tgt.dead) return;
   tgt.dead = true; tgt.hp = 0; tgt.deathT = 0;
   if (tgt.isStruct) {
-    var label = (tgt.team === 0 ? 'Green ' : 'Tan ') + (tgt.kind === 'hq' ? 'HQ' : tgt.kind === 'depot' ? 'supply dump' : 'MG nest');
-    feed(label + (tgt.kind === 'depot' ? ' destroyed' : ' overrun'), tgt.team === 0 ? 'ft' : 'fg');
-    toast(label + (tgt.kind === 'depot' ? ' destroyed' : ' overrun'), 2.5);
+    var label = (tgt.team === 0 ? 'Green ' : 'Tan ') + (tgt.kind === 'hq' ? 'fort' : tgt.kind === 'depot' ? 'supply bucket' : 'sand turret');
+    feed(label + (tgt.kind === 'depot' ? ' knocked over' : ' destroyed'), tgt.team === 0 ? 'ft' : 'fg');
+    emit('struct', tgt.id, tgt.team, tgt.kind, src && src.kind === 'hero' ? src.id : 0);
     chips(tgt.x, tgt.y - 30, tgt.team, 30, 1.6);
     fx({ k: 'boom', x: tgt.x, y: tgt.y, r: tgt.r * 2, t: 0, dur: 0.6 });
     sfx('boom', tgt.x, tgt.y);
@@ -179,6 +180,7 @@ function kill(src, tgt) {
   var killer = src && src.kind === 'hero' ? src : (tgt.lastHitT > 0 ? tgt.lastHit : null);
   G.kills[1 - tgt.team]++;
   if (killer && killer.team !== tgt.team) {
+    emit('kill', killer.id, tgt.id, nm(tgt), killer.st.streak + 1);
     killer.kills++; killer.st.k++; killer.st.streak++; killer.st.best = Math.max(killer.st.best, killer.st.streak); giveXp(killer, 220);
     Object.keys(tgt.dmgBy).forEach(function (id) {
       if (G.time - tgt.dmgBy[id] > 10) return;
@@ -189,9 +191,9 @@ function kill(src, tgt) {
     G.units.forEach(function (h) { if (h !== killer && h.kind === 'hero' && h.team === killer.team && !h.dead && dist(h, tgt) < 1100) giveXp(h, 90); });
   }
   tgt.dmgBy = {};
-  var by = killer && killer.team !== tgt.team ? nm(killer) : (src && src.isStruct ? 'an MG nest' : src && src.kind === 'minion' ? 'the line' : 'artillery');
-  feed(by + ' dropped ' + nm(tgt), tgt.team === 0 ? 'ft' : 'fg');
-  emit('kia', tgt.id, Math.ceil(tgt.respawn));
+  var by = killer && killer.team !== tgt.team ? nm(killer) : (src && src.isStruct ? 'a sand turret' : src && src.kind === 'minion' ? 'the line' : 'the sprinkler');
+  feed(by + ' eliminated ' + nm(tgt), tgt.team === 0 ? 'ft' : 'fg');
+  emit('kia', tgt.id, Math.ceil(tgt.respawn), tgt.team, killer && killer.team !== tgt.team ? killer.id : 0);
 }
 function giveXp(h, n) {
   h.xp += n;

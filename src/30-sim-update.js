@@ -34,7 +34,7 @@ function update(dt) {
 
 function updateStruct(s, dt) {
   if (s.dead) {
-    if (s.kind === 'depot' && s.respawn > 0) { s.respawn -= dt; if (s.respawn <= 0) { s.dead = false; s.hp = s.maxHp; rebuildBlockers(); feed((s.team === 0 ? 'Green' : 'Tan') + ' supply dump rebuilt', s.team === 0 ? 'fg' : 'ft'); } }
+    if (s.kind === 'depot' && s.respawn > 0) { s.respawn -= dt; if (s.respawn <= 0) { s.dead = false; s.hp = s.maxHp; rebuildBlockers(); feed((s.team === 0 ? 'Green' : 'Tan') + ' supply bucket refilled', s.team === 0 ? 'fg' : 'ft'); } }
     return;
   }
   if (s.kind === 'depot') return;
@@ -400,8 +400,8 @@ function updateMines(dt) {
 function startBarrage() {
   if (G.barrage) return;
   G.barrage = { beams: [ { t: 0.5, dir: -1, acc: 0 }, { t: 0.5, dir: 1, acc: 0.15 } ], r: 150 };
-  toast('Rolling barrage on the road. Push or die.', 3);
-  feed('Artillery walking outward from the centre', '');
+  emit('sprinkler');
+  feed('The sprinkler came on: water sweeping out from the centre', '');
 }
 function updateBarrage(dt) {
   if (!G.barrage && G.time > 18 * 60) startBarrage();
@@ -411,7 +411,7 @@ function updateBarrage(dt) {
     var c = lanePt(b.t, Math.sin(G.time * 0.9 + b.dir) * 90); b.x = c.x; b.y = c.y;
     G.units.forEach(function (u) { if (!u.dead && dist(u, b) < G.barrage.r) damage(null, u, (u.kind === 'hero' ? 140 : 220) * dt, { tick: 1 }); });
     b.acc -= dt;
-    if (b.acc <= 0) { b.acc = 0.22; var a = rnd(0, Math.PI * 2), rr = Math.random() * G.barrage.r; fx({ k: 'boom', x: b.x + Math.cos(a) * rr, y: b.y + Math.sin(a) * rr * 0.6, r: 60, t: 0, dur: 0.4 }); sfx('boom', b.x, b.y); }
+    if (b.acc <= 0) { b.acc = 0.22; var a = rnd(0, Math.PI * 2), rr = Math.random() * G.barrage.r; fx({ k: 'splash', x: b.x + Math.cos(a) * rr, y: b.y + Math.sin(a) * rr * 0.6, t: 0, dur: 0.5 }); sfx('splash', b.x, b.y); }
   });
 }
 function separate(dt) {

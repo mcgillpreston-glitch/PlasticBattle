@@ -71,7 +71,75 @@ function paintPose(ctx, key, team, flip, flash) {
   ctx.fillStyle = 'rgba(110,95,70,0.14)'; ctx.fill(p.body);
   ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 1; ctx.stroke(p.body);
   ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fill(p.shine);
+  paintGear(ctx, key, C);
   ctx.restore();
+}
+
+/* Modern operator gear and weapons, drawn over the one-piece plastic body. */
+var WPN = { pointman: 'carbine', kneeler: 'dmr', sniper: 'sniper', bazooka: 'launcher', grenadier: 'gl', radioman: 'radio', flamer: 'flame', sweeper: 'detector',
+  mortar: 'mortar', officer: 'pistol', gunner: 'lmg', charger: 'breacher', para: 'carbine', scout: 'carbine', shotgun: 'shotgun', commando: 'smg' };
+var GUN = { fill: '#23262B', edge: '#0A0B0D', hi: 'rgba(255,255,255,0.22)' };
+function gearRect(ctx, cx, cy, ang, w, h, r, fill, edge) {
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
+  ctx.beginPath(); ctx.moveTo(-w / 2 + r, -h / 2); ctx.lineTo(w / 2 - r, -h / 2); ctx.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r); ctx.lineTo(w / 2, h / 2 - r); ctx.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2); ctx.lineTo(-w / 2 + r, h / 2); ctx.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r); ctx.lineTo(-w / 2, -h / 2 + r); ctx.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2); ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill(); if (edge) { ctx.strokeStyle = edge; ctx.lineWidth = 1.5; ctx.stroke(); }
+  ctx.restore();
+}
+function drawGun(ctx, a, b, kind) {
+  var dx = b[0] - a[0], dy = b[1] - a[1], L = Math.sqrt(dx * dx + dy * dy); if (L < 4) return;
+  var ang = Math.atan2(dy, dx), ux = dx / L, uy = dy / L, px = -uy, py = ux;
+  if (py < 0) { px = -px; py = -py; }
+  function at(t, off) { return [a[0] + ux * L * t + px * off, a[1] + uy * L * t + py * off]; }
+  function seg(t0, t1, off, w, fill) { var m = at((t0 + t1) / 2, off); gearRect(ctx, m[0], m[1], ang, L * (t1 - t0), w, Math.min(3, w / 2), fill, GUN.edge); }
+  var big = kind === 'lmg' || kind === 'sniper' || kind === 'dmr';
+  if (kind === 'pistol') { seg(0, 1, 0, 7, GUN.fill); var g = at(0.3, 5); gearRect(ctx, g[0], g[1], ang + 1.2, 10, 5, 2, GUN.fill, GUN.edge); return; }
+  if (kind === 'launcher') { seg(0, 1, 0, 13, GUN.fill); seg(0.86, 1.02, 0, 17, GUN.fill); seg(-0.02, 0.12, 0, 16, GUN.fill); var s = at(0.55, -10); gearRect(ctx, s[0], s[1], ang, 10, 7, 2, GUN.fill, GUN.edge); seg(0.3, 0.5, 0, 14, '#2E3238'); return; }
+  if (kind === 'mortar') { seg(0, 1, 0, 11, GUN.fill); seg(0.92, 1.04, 0, 14, GUN.fill); return; }
+  if (kind === 'detector') { seg(0, 1, 0, 3.5, GUN.fill); return; }
+  if (kind === 'flame') { seg(0, 1, 0, 6, GUN.fill); seg(0.85, 1.05, 0, 9, '#3A2C1E'); return; }
+  // rifles, carbines, SMGs, shotguns, LMG
+  var bw = big ? 4.2 : 3.4;
+  seg(0.55, 1.0, 0, bw, GUN.fill);                       // barrel
+  seg(0.0, 0.3, 0, big ? 8 : 7, GUN.fill);               // stock
+  seg(0.28, 0.6, 0, big ? 12 : 10, GUN.fill);            // receiver
+  if (kind !== 'shotgun') { var m = at(0.46, kind === 'lmg' ? 9 : 10); gearRect(ctx, m[0], m[1], ang + (kind === 'lmg' ? 0 : 0.25), kind === 'lmg' ? 16 : 7, kind === 'lmg' ? 11 : kind === 'smg' ? 16 : 13, 2, GUN.fill, GUN.edge); }
+  else seg(0.5, 0.95, 4, 4, GUN.fill);                   // tube magazine
+  if (kind === 'sniper' || kind === 'dmr') { var sc = at(0.45, -8); gearRect(ctx, sc[0], sc[1], ang, kind === 'sniper' ? 22 : 15, 6, 3, GUN.fill, GUN.edge); }
+  else { var o = at(0.44, -7); gearRect(ctx, o[0], o[1], ang, 8, 5, 1.5, GUN.fill, GUN.edge); }
+  if (kind === 'carbine' || kind === 'smg' || kind === 'dmr') seg(0.88, 1.04, 0, bw + 2.6, GUN.fill);   // suppressor
+  if (kind === 'gl') { seg(0.5, 0.86, 5.5, 6, '#2E3238'); }
+  if (kind === 'breacher') { seg(0.92, 1.12, 0, 4, '#B9BCC2'); }
+  var h = at(0.62, -1.5); ctx.strokeStyle = GUN.hi; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(h[0] - ux * L * 0.18, h[1] - uy * L * 0.18); ctx.lineTo(h[0] + ux * L * 0.3, h[1] + uy * L * 0.3); ctx.stroke();
+}
+function paintGear(ctx, key, C) {
+  var P = POSES[key] || POSES.pointman, hr = P.hr || 13, tr = P.tr || 16, kind = WPN[key] || 'carbine';
+  var gear = C.c3, edge = C.ol;
+  // plate carrier along the torso
+  var nx = P.n[0], ny = P.n[1], qx = P.p[0], qy = P.p[1], tl = Math.sqrt((qx - nx) * (qx - nx) + (qy - ny) * (qy - ny)), ta = Math.atan2(qy - ny, qx - nx) - Math.PI / 2;
+  var cx = (nx + qx) / 2, cy = (ny + qy) / 2;
+  gearRect(ctx, cx, cy, ta, tr * 1.9, tl * 0.78, 5, gear, edge);
+  var sx = Math.cos(ta + Math.PI / 2), sy = Math.sin(ta + Math.PI / 2);
+  for (var i = -1; i <= 1; i++) gearRect(ctx, cx + Math.cos(ta) * i * tr * 0.55 + sx * tl * 0.22, cy + Math.sin(ta) * i * tr * 0.55 + sy * tl * 0.22, ta, tr * 0.42, tl * 0.2, 2, C.c2, edge);
+  gearRect(ctx, cx - sx * tl * 0.3, cy - sy * tl * 0.3, ta, tr * 1.6, 4, 2, edge, null);
+  // knee pads and boots
+  P.legs.forEach(function (Lg) { ctx.fillStyle = gear; ctx.beginPath(); ctx.arc(Lg[1][0], Lg[1][1], 7, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = edge; ctx.lineWidth = 1.5; ctx.stroke(); });
+  // helmet: high-cut dome with brim rail and NVG mount
+  var hx = P.h[0], hy = P.h[1];
+  ctx.fillStyle = gear; ctx.strokeStyle = edge; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(hx, hy + 1, hr + 2.5, Math.PI, Math.PI * 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+  gearRect(ctx, hx, hy + 2, 0, hr * 2 + 7, 4, 2, gear, edge);
+  gearRect(ctx, hx + hr * 0.5, hy - hr - 1, 0, 8, 6, 1.5, GUN.fill, GUN.edge);
+  ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.arc(hx - 3, hy - 4, hr * 0.55, Math.PI * 1.1, Math.PI * 1.7); ctx.lineTo(hx - 3, hy - 4); ctx.closePath(); ctx.fill();
+  // weapon overlay
+  var ex = P.ex || [], w = null;
+  if (kind === 'gl') { var A = P.arms[1]; w = [[A[0][0] - 20, A[0][1] - 2], [A[1][0] + 14, A[1][1] - 4]]; }
+  else if (kind === 'radio') { var R = P.arms[1]; w = [[R[0][0] - 24, R[0][1] + 10], [R[1][0] + 16, R[1][1] + 2]]; kind = 'carbine'; }
+  else if (key === 'scout' && ex[1]) w = [[ex[1][0], ex[1][1]], [ex[1][2], ex[1][3]]];
+  else if (key === 'para') w = [[P.p[0] - 22, P.p[1] - 6], [P.p[0] + 26, P.p[1] - 14]];
+  else if (ex[0]) w = [[ex[0][0], ex[0][1]], [ex[0][2], ex[0][3]]];
+  if (w) drawGun(ctx, w[0], w[1], kind);
+  if (key === 'flamer' && ex[2]) drawGun(ctx, [ex[2][0], ex[2][1]], [ex[2][2], ex[2][3]], 'flame');
+  if (key === 'sweeper' && ex[1]) { ctx.fillStyle = GUN.fill; ctx.strokeStyle = GUN.edge; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(ex[1][2] - 6, ex[1][3], 15, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
 }
 var spriteCache = {};
 function sprite(key, team, h, flip, flash) {

@@ -18,12 +18,13 @@ function newGame(heroIdx, size) {
   simNewGame(roster);
   G.player = G.units.find(function (u) { return u.id === roster[0].uid; });
   enterMatch();
-  showToast('Deployed. Field Orders at the CP from level 3', 3);
+  showAlert('DEPLOYED · FIELD ORDERS AT BASE FROM LEVEL 3', 'info');
 }
 function enterMatch() {
   var f = fountain(MYTEAM); cam.x = f.x; cam.y = f.y; cam.lock = true;
   aimSlot = null; aMovePending = false; hoverT = null;
   buildAbilityBar(); renderFeed();
+  ALERT.q = []; ALERT.t = 0; ALERT.lastStruct = {}; ALERT.el.hidden = true; if (G) G.hitDirs = [];
 }
 
 function addFx(o) { if (G && G.fx.length < 700) G.fx.push(o); }
@@ -57,11 +58,27 @@ function present(e) {
       u = unitById(e[1]); if (!u || u._hidden) break;
       var amt = e[3]; u.flashT = 0.08;
       if (amt > 8 && Math.random() < 0.7) chipsFx(u.x, u.isStruct ? u.y - 40 : u.y - unitH(u) * 0.45, u.team, u.isStruct ? 2 : 3, u.isStruct ? 0.5 : 0.6);
-      if (isMe(e[1])) { G.hurtT = Math.max(G.hurtT, 0.35); playSfx('hit', u.x, u.y); floatText(u.x, u.y - unitH(u) - 10, amt, '#E0703F'); }
-      else if (isMe(e[2])) { playSfx('hit', u.x, u.y); floatText(u.x, u.y - (u.isStruct ? 120 : unitH(u)) - 10, amt, '#F5EFD8'); }
+      if (isMe(e[1])) {
+        G.hurtT = Math.max(G.hurtT, 0.35); playSfx('hit', u.x, u.y); floatText(u.x, u.y - unitH(u) - 10, amt, '#FF5A4E');
+        var att = unitById(e[2]); if (att) { G.hitDirs = (G.hitDirs || []).filter(function (h) { return h.src !== att.id; }); G.hitDirs.push({ src: att.id, ang: Math.atan2(att.y - u.y, att.x - u.x), t: 0.9 }); }
+      }
+      else if (isMe(e[2])) { playSfx('hit', u.x, u.y); floatText(u.x, u.y - (u.isStruct ? 120 : unitH(u)) - 10, amt, '#FFFFFF'); }
+      if (u.isStruct && u.team === MYTEAM && !u.dead) alertStruct(u);
       break;
-    case 'kia': if (isMe(e[1])) { showToast('KIA. Reinforcing in ' + e[2] + 's', 2.5); G.hurtT = 1.2; } break;
-    case 'lvl': if (isMe(e[1])) { showToast('Level ' + e[2] + (ORDER_LEVELS.indexOf(e[2]) >= 0 ? ' · Field Orders waiting at the CP' : ''), 2); playSfx('ui'); } break;
+    case 'kill':
+      u = unitById(e[2]);
+      if (isMe(e[1])) {
+        var kp = u ? aimPoint(u) : null;
+        if (kp) addFx({ k: 'hitmark', x: kp.x, y: kp.y, t: 0, dur: 0.5, kill: true });
+        var pl = G.player; addFx({ k: 'banner', x: pl.x, y: pl.y - unitH(pl) - 70, t: 0, dur: 1.6, txt: 'ELIMINATED ' + String(e[3]).toUpperCase(), sub: '+100' + (e[4] >= 3 ? '  \u00b7  ' + e[4] + ' KILL STREAK' : ''), c: '#FFFFFF' });
+        playSfx('kill');
+      } else if (u && u.team === MYTEAM) showAlert('UNIT LOST', 'bad');
+      break;
+    case 'struct': if (e[2] === MYTEAM) showAlert((e[3] === 'hq' ? 'FORT' : e[3] === 'depot' ? 'SUPPLY BUCKET' : 'SAND TURRET') + ' LOST', 'bad'); else showAlert('ENEMY ' + (e[3] === 'hq' ? 'FORT' : e[3] === 'depot' ? 'SUPPLY BUCKET' : 'SAND TURRET') + ' DESTROYED', 'good'); break;
+    case 'wave': if (e[1] % 3 === 0) showAlert('REINFORCEMENTS HAVE ARRIVED', 'info'); break;
+    case 'sprinkler': showAlert('SPRINKLER ACTIVATED \u00b7 CLEAR THE CENTRE', 'bad'); break;
+    case 'kia': if (isMe(e[1])) { var kb = unitById(e[4]); showAlert('KIA' + (kb ? ' \u00b7 KILLED BY ' + (kb.pname || kb.name).toUpperCase() : '') + ' \u00b7 REINFORCING ' + e[2] + 'S', 'bad'); G.hurtT = 1.2; G.hitDirs = []; } break;
+    case 'lvl': if (isMe(e[1])) { showAlert('PROMOTED TO LEVEL ' + e[2] + (ORDER_LEVELS.indexOf(e[2]) >= 0 ? ' · FIELD ORDERS AT BASE' : ''), 'good'); playSfx('ui'); } break;
     case 'heal': if (isMe(e[1])) { u = unitById(e[1]); if (u) floatText(u.x, u.y - 100, '+' + e[2], '#B8E07A'); playSfx('ui'); } break;
     case 'a':
       u = unitById(e[1]); if (!u) break;
@@ -86,6 +103,8 @@ function updateVisuals(dt) {
   if (!G) return;
   if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) toastEl.textContent = ''; }
   if (G.hurtT > 0) G.hurtT -= dt;
+  if (G.hitDirs) G.hitDirs = G.hitDirs.filter(function (h) { h.t -= dt; return h.t > 0; });
+  updateAlerts(dt);
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 28);
   if (G.moveMark) { G.moveMark.t -= dt; if (G.moveMark.t <= 0 || (NET.mode === 'local' && G.player && !G.player.move)) G.moveMark = null; }
   G.feed.forEach(function (f) { f.t -= dt; });
@@ -119,12 +138,23 @@ function visUnit(u, dt) {
   if (u.cone && u.cone.ab && u.cone.ab.dur > 0.1 && Math.random() < 0.9) addFx({ k: 'cone', x: u.x, y: u.y - 30, a: Math.atan2(u.cone.dir.y, u.cone.dir.x), ang: u.cone.ab.ang, r: u.cone.ab.range, t: 0, dur: 0.15, c: u.cone.ab.n === 'Sweep' ? '#FF9A3D' : '#FFE29A' });
 }
 
+/* Red Alert style EVA alerts: short, queued, flashing */
+var ALERT = { q: [], t: 0, el: document.getElementById('alert'), lastStruct: {} };
+function showAlert(txt, cls) { if (ALERT.q.length > 3) ALERT.q.shift(); ALERT.q.push({ txt: txt, cls: cls || 'info' }); }
+function alertStruct(s) { var now = G.time; if (ALERT.lastStruct[s.id] != null && now - ALERT.lastStruct[s.id] < 12) return; ALERT.lastStruct[s.id] = now; showAlert((s.kind === 'hq' ? 'FORT' : s.kind === 'depot' ? 'SUPPLY BUCKET' : 'SAND TURRET') + ' UNDER ATTACK', 'bad'); }
+function updateAlerts(dt) {
+  if (ALERT.t > 0) { ALERT.t -= dt; if (ALERT.t <= 0) { ALERT.el.hidden = true; ALERT.el.className = 'hud'; } return; }
+  if (!ALERT.q.length) return;
+  var a = ALERT.q.shift(); ALERT.el.textContent = a.txt; ALERT.el.className = 'hud on ' + a.cls; ALERT.el.hidden = false; ALERT.t = 2.4;
+  if (a.cls === 'bad') playSfx('alert');
+}
 function showEnd(winner) {
   if (!G) return;
   G.over = true; G.winner = winner;
   var p = G.player, won = winner === MYTEAM, st = (p && p.st) || { k: 0, d: 0 };
-  document.getElementById('endTitle').textContent = won ? 'Objective secured' : 'Position lost';
-  document.getElementById('endEyebrow').textContent = winner === 0 ? 'Tan pillbox destroyed · Green wins' : 'Green command post overrun · Tan wins';
+  document.getElementById('endTitle').textContent = won ? 'Mission accomplished' : 'Mission failed';
+  document.getElementById('endEyebrow').textContent = winner === 0 ? 'Tan bucket bunker destroyed · Green wins' : 'Green sand fort destroyed · Tan wins';
+  showAlert(won ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED', won ? 'good' : 'bad');
   document.getElementById('endStats').textContent = 'Match time ' + fmtTime(G.time) + ' · You fought as ' + (p ? p.name : '-') + ' · ' + st.k + ' kills, ' + st.d + ' casualties · Level ' + (p ? p.lvl : '-');
   document.getElementById('again').textContent = NET.mode === 'online' ? 'Back to lobby' : 'Roll call';
   document.getElementById('endModal').hidden = false;

@@ -10,7 +10,7 @@ function audioInit() {
     for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
   } catch (e) { AC = null; }
 }
-var SFX_GAP = { rifle: .03, mg: .03, hit: .05, boom: .08, flame: .1, melee: .05, cast: .05, cannon: .08, rocket: .1, ui: .05, shell: .1 };
+var SFX_GAP = { splash: .08, kill: .2, alert: .5, rifle: .03, mg: .03, hit: .05, boom: .08, flame: .1, melee: .05, cast: .05, cannon: .08, rocket: .1, ui: .05, shell: .1 };
 function playSfx(kind, x, y) {
   if (!AC || !opts.sound || !G) return;
   if (AC.state === 'suspended') { try { AC.resume(); } catch (e) {} }
@@ -43,5 +43,8 @@ function playSfx(kind, x, y) {
     case 'hit': tone('square', 700, 300, 0.04, 0.16); break;
     case 'cast': tone('sine', 420, 840, 0.09, 0.2); break;
     case 'ui': tone('sine', 600, 600, 0.05, 0.15); break;
+    case 'splash': noise(0.25, 'highpass', 2500, 0.5, 0.3, 0.22); break;
+    case 'kill': tone('square', 880, 440, 0.07, 0.18); tone('sine', 1320, 660, 0.12, 0.12); break;
+    case 'alert': tone('square', 520, 520, 0.08, 0.14); tone('square', 390, 390, 0.1, 0.14); break;
   }
 }

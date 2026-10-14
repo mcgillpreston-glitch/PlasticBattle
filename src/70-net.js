@@ -78,7 +78,7 @@ function netStart(m) {
   ordersModal.hidden = true; closeSB(); document.getElementById('endModal').hidden = true;
   draftEl.hidden = true; document.getElementById('help').hidden = false;
   enterMatch();
-  showToast('Deployed with ' + (MYTEAM === 0 ? 'Green' : 'Tan') + ' Army. Field Orders at the CP from level 3', 3);
+  showAlert('DEPLOYED WITH ' + (MYTEAM === 0 ? 'GREEN' : 'TAN') + ' ARMY · FIELD ORDERS AT BASE FROM LEVEL 3', 'info');
 }
 function mirrorHero(r, mine) {
   var spec = HEROES[r.hero], f = fountain(r.team);

@@ -58,13 +58,13 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
 
   // Move both players toward mid by clicking the ground ahead of them
   const startA = a.me;
-  await A.mouse.move(1100, 250); await A.mouse.click(1100, 250);
+  await A.mouse.move(900, 250); await A.mouse.click(900, 250);
   await B.mouse.move(200, 600); await B.mouse.click(200, 600);
   await sleep(2500);
   a = await st(A); b = await st(B);
   const movedA = Math.hypot(a.me.x - startA.x, a.me.y - startA.y);
   check('click-to-move is applied by the server and shown on the client', movedA > 150, { movedA: Math.round(movedA) });
-  await A.mouse.move(1100, 250); await A.keyboard.press('q'); await sleep(500);
+  await A.mouse.move(900, 250); await A.keyboard.press('q'); await sleep(500);
   a = await st(A);
   check('ability cast goes through the server (Q on cooldown)', a.me.cdQ > 0, { cdQ: a.me.cdQ });
 
@@ -106,7 +106,7 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
   await A.waitForSelector('#endModal:not([hidden])', { timeout: 5000 });
   await C.waitForSelector('#endModal:not([hidden])', { timeout: 5000 });
   const endA = await A.textContent('#endTitle'), endBtn = await A.textContent('#again');
-  check('match end shows the result to everyone', /secured/.test(endA) && /lobby/i.test(endBtn), { endA, endBtn });
+  check('match end shows the result to everyone', /accomplished|secured/.test(endA) && /lobby/i.test(endBtn), { endA, endBtn });
   await A.screenshot({ path: out + '-end.png' });
   await A.click('#again');
   await A.waitForFunction(() => !document.getElementById('lobbyPanel').hidden && /host/.test(document.getElementById('lStatus').textContent), null, { timeout: 15000 });

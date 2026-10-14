@@ -1,6 +1,6 @@
 # Plastic Front
 
-An all-ARAM, toy-soldier MOBA that runs in the browser. Classic plastic army men fight down one diagonal lane, a sunken Normandy road between hedgerows, with a gritty WWII look. Play offline against bots, or online in real time against other people.
+An all-ARAM, toy-soldier MOBA that runs in the browser. Modern-kit plastic army men fight across a backyard sandbox: one diagonal lane between wooden planks, with sandcastle turrets, toy buckets, a dump truck and the lawn beyond. Combat feedback is modern-shooter style (hitmarkers, damage numbers, damage direction, kill confirms), and the HUD is a riveted command sidebar with a radar, in the manner of a classic 90s RTS. Play offline against bots, or online in real time against other people.
 
 **Play:** https://mcgillpreston-glitch.github.io/PlasticBattle/
 
@@ -22,7 +22,7 @@ The **server runs the real match**: movement, combat, bots, Field Orders and the
 - **Snapshots.** The server ticks the sim at 40 Hz and sends each team a snapshot 20 times a second, about 20–25 KB/s per player.
 - **Fog of war.** Each team only receives units it can actually see, so an enemy hiding in a thicket is never sent to the other side's browser.
 - **Smoothing.** Clients render 100 ms behind the newest snapshot and interpolate, so movement looks smooth.
-- **Ping.** Your ping shows under the match clock.
+- **Ping.** Your ping shows in the top strip.
 
 ### Deploy the game server
 
@@ -46,11 +46,11 @@ The GitHub Pages site is static, so online play needs the small Node server in `
 ## The game
 
 - **Mode:** ARAM only. Draw a random hero, with one reassignment. Offline you can pick any hero in test mode and play 1v1, 3v3 or 5v5 against bots.
-- **Map:** The Sunken Road. Each side has two MG nests, a supply dump and an HQ, and they must fall in that order. The road has thickets that hide units, med crates that heal, and walls, a wrecked jeep, a cart and stumps for cover.
+- **Map:** The Sandbox. Each side has two sand turrets, a supply bucket and a fort (Green's sandcastle, Tan's overturned bucket bunker), and they must fall in that order. Weeds growing through the sand hide units, first-aid tins heal, and sandcastle walls, a toy dump truck, a shovel and buckets give cover.
 - **Reserves:** a minion wave every 25 s, a tank every third wave, and a jeep once the enemy supply dump is down.
 - **Heroes:** 16, one for each classic army-men pose. Each has Q/W/E/R, plus D (Tag Round, then press again to close in) and F (Hit the Deck).
 - **Field Orders:** augments at levels 3, 7, 11 and 15, in Squad, Platoon and Company tiers, issued at your CP or while reinforcing.
-- **Overtime:** a rolling artillery barrage walks out from the centre after 18:00.
+- **Overtime:** the lawn sprinkler comes on after 18:00 and sweeps out from the centre; anything caught in the water takes damage.
 
 ## Controls
 
@@ -62,7 +62,7 @@ The GitHub Pages site is static, so online play needs the small Node server in `
 | D | Tag Round, then D again to close in |
 | F | Hit the Deck (dive) |
 | S | Halt |
-| Tab (hold) | Scoreboard |
+| Tab (hold) | Intel report (scoreboard) |
 | O | Field Orders |
 | Space / Y | Centre camera / toggle camera lock |
 | Mouse wheel | Zoom |
@@ -77,12 +77,12 @@ index.html                 built, standalone game (GitHub Pages and the server b
 build.js                   concatenates src/ into index.html
 src/00-shell.html          page markup and styles
 src/10-data.js             shared: heroes, Field Orders, map geometry
-src/11-art.js              browser: plastic soldier sculpts and sprites
+src/11-art.js              browser: plastic soldier sculpts, modern gear and weapon overlays, sprites
 src/12-audio.js            browser: synthesized sound
 src/20-sim-core.js         shared: state, damage and stats, collision, pathfinding, abilities, events
 src/30-sim-update.js       shared: update loop, attacks, bots and minions, Field Orders rules
 src/40-render.js           browser: terrain, units, effects, minimap
-src/50-present.js          browser: turns sim events into visuals and sound
+src/50-present.js          browser: turns sim events into visuals, sound and EVA-style alerts
 src/60-hud-input.js        browser: HUD, scoreboard, Field Orders UI, input, game loop
 src/70-net.js              browser: online client, lobby, snapshot interpolation
 server/server.js           game server: rooms, lobby, matches, snapshots, commands

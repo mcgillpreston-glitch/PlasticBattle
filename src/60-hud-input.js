@@ -31,17 +31,19 @@ function hud() {
     if (u.dead) { el.hidden = false; el.textContent = ''; el.style.background = 'rgba(0,0,0,0.6)'; return; }
     var show = cd > 0 && !opts.nocd;
     el.hidden = !show;
-    if (show) { var pct = Math.round(100 * cd / Math.max(0.01, u.cdMax[s])); el.textContent = cd >= 1 ? Math.ceil(cd) : cd.toFixed(1); el.style.background = 'conic-gradient(rgba(0,0,0,0.82) ' + pct + '%, rgba(0,0,0,0.25) 0)'; }
+    if (show) { var pct = Math.round(100 * cd / Math.max(0.01, u.cdMax[s])); el.textContent = cd >= 1 ? Math.ceil(cd) : cd.toFixed(1); el.style.background = 'linear-gradient(to top, rgba(0,0,0,0.82) ' + pct + '%, rgba(0,0,0,0.25) 0)'; }
   });
   var mh = maxHp(u);
-  document.getElementById('hpi').style.width = (100 * clamp(u.hp / mh, 0, 1)) + '%';
+  var hpf = clamp(u.hp / mh, 0, 1), hpm = document.getElementById('hpi').parentNode;
+  document.getElementById('hpi').style.width = (100 * hpf) + '%';
+  hpm.classList.toggle('crit', !u.dead && hpf < 0.3); hpm.classList.toggle('warn', !u.dead && hpf >= 0.3 && hpf < 0.6);
   document.getElementById('shb').style.width = (100 * clamp((u.hp + u.shield) / mh, 0, 1)) + '%';
   document.getElementById('hpt').textContent = u.dead ? 'REINFORCING · ' + Math.ceil(u.respawn) + 'S' : Math.ceil(u.hp) + ' / ' + mh;
   document.getElementById('xpi').style.width = (100 * (u.lvl >= 18 ? 1 : u.xp / xpNeed(u.lvl))) + '%';
   document.getElementById('lvl').textContent = u.lvl;
   var ob = document.getElementById('ordersBtn'), owed = ordersOwed(u);
   ob.classList.toggle('ready', owed > 0 && atBase(u));
-  ob.textContent = owed > 0 ? (atBase(u) ? 'Orders ready' : 'Orders at CP (' + owed + ')') : 'Field Orders';
+  ob.textContent = owed > 0 ? (atBase(u) ? 'ORDERS READY' : 'ORDERS AT BASE (' + owed + ')') : 'FIELD ORDERS';
   var sq = document.getElementById('squad');
   sq.innerHTML = '';
   G.units.filter(function (h) { return h.kind === 'hero' && h.team === MYTEAM && !h.isPlayer; }).forEach(function (h) {
@@ -83,7 +85,7 @@ function renderSB() {
   });
   var tot = teams[0].dmgH + teams[1].dmgH || 1;
   document.getElementById('sbTug').innerHTML = '<i style="width:' + (100 * teams[0].dmgH / tot).toFixed(1) + '%;background:var(--green)"></i><i style="flex:1;background:var(--tan)"></i>';
-  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b></span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Barrage active</b></span>' : '<span>Barrage at <b>18:00</b></span>');
+  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b></span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Sprinkler on</b></span>' : '<span>Sprinkler at <b>18:00</b></span>');
   var html = '';
   teams.forEach(function (T) {
     var cls = T.team === 0 ? 'g' : 't', name = T.team === 0 ? 'Green Army' : 'Tan Army';
@@ -96,7 +98,7 @@ function renderSB() {
     T.hs.forEach(function (h) {
       var b = function (c, v) { return '<td' + (best[c] > 0 && h.st[c] === best[c] ? ' class="best"' : '') + '>' + v + '</td>'; };
       var hpPct = Math.round(100 * clamp(h.hp / maxHp(h), 0, 1));
-      var status = h._hidden && h.team !== MYTEAM && !h.dead ? '<span class="st">Unseen</span>' : h.dead ? '<span class="st">Reinforcing ' + Math.ceil(h.respawn) + 's</span>' : '<span class="st">' + (atBase(h) ? 'At CP' : 'In the field') + '</span><span class="hp"><i style="width:' + hpPct + '%;background:' + TEAMC[h.team].bar + '"></i></span>';
+      var status = h._hidden && h.team !== MYTEAM && !h.dead ? '<span class="st">Unseen</span>' : h.dead ? '<span class="st">Reinforcing ' + Math.ceil(h.respawn) + 's</span>' : '<span class="st">' + (atBase(h) ? 'At base' : 'In the field') + '</span><span class="hp"><i style="width:' + hpPct + '%;background:' + TEAMC[h.team].bar + '"></i></span>';
       html += '<tr class="' + (h.isPlayer ? 'me' : '') + (h.dead ? ' down' : '') + '"><td><span class="who"><img alt="" src="' + portrait(h.pose, h.team) + '"><span class="nm">' + h.name + '</span>' + (h.isPlayer ? '<span class="you">YOU</span>' : '') + '</span></td>' +
         '<td><span class="lv">' + h.lvl + '</span></td>' +
         '<td' + (best.k > 0 && h.st.k === best.k ? ' class="best"' : '') + '>' + h.st.k + ' / ' + h.st.d + ' / ' + h.st.a + '</td>' +
@@ -176,6 +178,7 @@ cv.addEventListener('wheel', function (e) { e.preventDefault(); cam.zSet = true;
 mini.addEventListener('pointerdown', function (e) {
   var r = mini.getBoundingClientRect(); cam.lock = false;
   cam.x = (e.clientX - r.left) / r.width * MAP.W; cam.y = (e.clientY - r.top) / r.height * MAP.H;
+  if (G && G.player && !G.player.dead && e.shiftKey) { var wp = { x: cam.x, y: cam.y }; cmdMove(freePoint(wp, G.player.r), false); }
 });
 window.addEventListener('keydown', function (e) {
   if (!G || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
@@ -219,7 +222,7 @@ function offerView(u) {
 function openOrders() {
   var u = G && G.player; if (!u || G.over) return;
   if (ordersOwed(u) <= 0) { showToast('No Field Orders waiting. Next at level ' + (ORDER_LEVELS.find(function (l) { return l > u.lvl; }) || '-'), 1.8); return; }
-  if (!atBase(u)) { showToast('Field Orders are issued at the CP or while reinforcing', 1.8); return; }
+  if (!atBase(u)) { showToast('Field Orders are issued at your base or while reinforcing', 1.8); return; }
   if (NET.mode === 'local') { if (!u.offer) rollOffer(u); }
   else if (!u.offer) { netSend({ t: 'orders' }); NET.wantOrders = true; showToast('Requisitioning orders\u2026', 1); return; }
   renderOrders();
