@@ -1,0 +1,293 @@
+<title>Plastic Front Playtest</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Oswald:wght@400;500;600;700&family=Special+Elite&display=swap">
+<style>
+/* Layout: full-bleed battlefield canvas with HUD plates pinned to the edges; one committed overcast-Normandy look, no light theme */
+:root {
+  --ink: #14130F; --panel: rgba(27,26,20,0.93); --panel2: #2C2A21; --line: rgba(214,203,170,0.3); --line2: rgba(0,0,0,0.6);
+  --khaki: #D6CBAA; --muted: #9A917A; --green: #4E6B2A; --greenHi: #9DB464; --tan: #B99A62; --tanHi: #E0C890; --alert: #B4432E;
+  --paper: #CDC19F; --paperInk: #2B2619;
+  --display: 'Black Ops One', 'Arial Black', Impact, sans-serif;
+  --body: 'Oswald', 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  --type: 'Special Elite', 'Courier New', monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { background: var(--ink); color: var(--khaki); font-family: var(--body); font-size: 15px; overflow: hidden; }
+button { font-family: var(--body); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--tanHi); outline-offset: 2px; }
+#app { position: relative; width: 100%; height: 100%; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+#game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: default; }
+.hud { position: absolute; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.plate { background: var(--panel); border: 1px solid var(--line); box-shadow: inset 0 0 0 1px var(--line2), 0 2px 6px rgba(0,0,0,0.5); background-image: linear-gradient(rgba(255,255,255,0.03), rgba(0,0,0,0.14)), repeating-linear-gradient(135deg, transparent 0 7px, rgba(255,255,255,0.02) 7px 8px); }
+.stencil { font-family: var(--display); font-weight: 400; text-transform: uppercase; letter-spacing: 1px; text-shadow: 0 1px 0 #000; }
+
+#score { top: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: stretch; overflow: hidden; font-variant-numeric: tabular-nums; }
+#score .side { padding: 4px 14px; display: flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: 2px; font-size: 13px; }
+#score .g { background: var(--green); color: #EFF3E2; }
+#score .t { background: var(--tan); color: #1E1A10; }
+#score .num { font-family: var(--display); font-size: 24px; letter-spacing: 0; }
+#score .mid { padding: 3px 14px; text-align: center; line-height: 1.05; }
+#score .clock { font-family: var(--display); font-size: 20px; }
+#score .forts { font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: 1px; }
+
+#feed { top: 10px; right: 10px; width: 280px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+#feed div { background: rgba(14,13,10,0.86); border-left: 3px solid var(--muted); padding: 4px 8px; font-family: var(--type); font-size: 13px; color: var(--khaki); }
+#feed .fg { border-left-color: var(--greenHi); }
+#feed .ft { border-left-color: var(--tan); }
+
+#dev { top: 10px; left: 10px; width: 250px; font-size: 14px; }
+#dev summary { cursor: pointer; padding: 7px 12px; list-style: none; display: flex; justify-content: space-between; font-size: 13px; color: var(--tanHi); }
+#dev summary::-webkit-details-marker { display: none; }
+#dev .body { padding: 2px 12px 12px; display: flex; flex-direction: column; gap: 7px; }
+#dev label { display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; }
+#dev .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+#dev button, .btn { background: var(--panel2); color: var(--khaki); border: 1px solid var(--line); padding: 6px 8px; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; cursor: pointer; min-height: 32px; }
+#dev button:hover, .btn:hover { border-color: var(--khaki); }
+#dev select, .field select { background: var(--panel2); color: var(--khaki); border: 1px solid var(--line); padding: 4px 6px; font-family: var(--body); font-size: 13px; }
+#dev .stat { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+#squad { left: 10px; bottom: 10px; width: 200px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.mate { display: flex; align-items: center; gap: 8px; background: rgba(27,26,20,0.9); border: 1px solid var(--line); padding: 3px 8px; font-size: 13px; font-weight: 600; }
+.mate .bar { flex: 1; height: 5px; background: #0B0A08; overflow: hidden; margin-top: 2px; }
+.mate .bar i { display: block; height: 100%; background: var(--greenHi); }
+.mate.dead { opacity: 0.55; }
+.mate .nm { flex: 1; min-width: 0; }
+
+#bar { bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: flex-end; gap: 10px; padding: 8px 10px; max-width: calc(100% - 20px); }
+#portrait { width: 64px; height: 76px; background: #1A1A14; border: 1px solid var(--line); position: relative; flex: none; }
+#portrait canvas { width: 64px; height: 76px; display: block; }
+#lvl { position: absolute; right: -7px; bottom: -7px; background: var(--tanHi); color: #1E1A10; font-family: var(--display); font-size: 13px; padding: 1px 6px; }
+#kit { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+#abil { display: flex; gap: 6px; flex-wrap: wrap; }
+.ab { position: relative; width: 58px; height: 54px; border: 1px solid var(--line); background: #3A4823; color: #E8E2C8; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2px; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5); }
+.ab.util { background: #2C2A21; }
+.ab.ult { border-color: var(--tanHi); }
+.ab .k { font-family: var(--display); font-size: 18px; line-height: 1; }
+.ab .n { font-size: 10px; font-weight: 600; letter-spacing: 0.5px; line-height: 1.05; text-align: center; text-transform: uppercase; }
+.ab .cd { position: absolute; inset: 0; color: #fff; font-family: var(--display); font-size: 18px; display: flex; align-items: center; justify-content: center; text-shadow: 0 1px 2px #000; }
+.ab.aim { box-shadow: 0 0 0 3px var(--tanHi); }
+.bars { display: flex; flex-direction: column; gap: 3px; }
+.hpb { position: relative; height: 14px; background: #0B0A08; border: 1px solid var(--line2); overflow: hidden; }
+.hpb i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(#7C9A42, #4E6B2A); }
+.hpb b { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(214,203,170,0.55); }
+.hpb span { position: relative; padding-left: 6px; font-size: 11px; font-weight: 600; line-height: 14px; letter-spacing: 0.5px; font-variant-numeric: tabular-nums; }
+.xpb { height: 4px; background: #0B0A08; overflow: hidden; }
+.xpb i { display: block; height: 100%; background: var(--tanHi); }
+#ordersBtn { flex: none; width: 76px; min-height: 76px; border: 1px solid var(--line); background: #2C2A21; color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; line-height: 1.15; cursor: pointer; }
+#ordersBtn.ready { background: var(--tan); color: #1E1A10; border-color: var(--tanHi); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 4px rgba(224,200,144,0.35); } }
+
+#mini { right: 10px; bottom: 10px; border: 3px solid #3A3426; background: #CDC19F; padding: 2px; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+#mini canvas { display: block; width: 220px; height: 136px; cursor: pointer; }
+
+#toast { top: 72px; left: 50%; transform: translateX(-50%); font-family: var(--display); font-size: 20px; letter-spacing: 1px; text-align: center; color: var(--khaki); text-shadow: 0 2px 0 #000, 0 0 12px rgba(0,0,0,0.8); pointer-events: none; white-space: nowrap; }
+#help { bottom: 116px; left: 50%; transform: translateX(-50%); padding: 5px 10px; font-family: var(--type); font-size: 12px; color: var(--muted); display: flex; gap: 10px; align-items: center; max-width: calc(100% - 20px); }
+#help b { color: var(--khaki); }
+#help button { background: none; border: none; color: var(--tanHi); font-weight: 600; cursor: pointer; font-size: 12px; font-family: var(--body); }
+
+.overlay { position: absolute; inset: 0; background: rgba(10,10,7,0.86); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
+.card { padding: 22px 24px; width: min(980px, 100%); display: flex; flex-direction: column; gap: 16px; max-height: 100%; overflow-y: auto; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: var(--greenHi); }
+h1, h2 { font-family: var(--display); font-weight: 400; margin: 0; line-height: 1; text-wrap: balance; letter-spacing: 1px; text-shadow: 0 2px 0 #000; }
+h1 { font-size: 40px; } h2 { font-size: 30px; }
+.draftRow { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+#draftFig { width: 200px; height: 240px; background: #23221B; border: 1px solid var(--line); flex: none; }
+#draftInfo { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.dossier { background: var(--paper); color: var(--paperInk); font-family: var(--type); padding: 12px 14px; border: 1px solid #8E8369; box-shadow: 3px 3px 0 rgba(0,0,0,0.45); display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.dossier .row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dashed rgba(43,38,25,0.35); padding-bottom: 3px; }
+.dossier b { font-weight: 400; color: #6B2E1E; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-size: 12px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; padding: 2px 8px; background: var(--khaki); color: #1E1A10; }
+.chip.tan { background: var(--tan); }
+.pickGrid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.pickGrid button { background: #2C2A21; color: var(--khaki); border: 1px solid var(--line); padding: 6px 2px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; line-height: 1.1; min-height: 44px; }
+.pickGrid button.on { border-color: var(--greenHi); background: #3A4823; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.big { min-height: 48px; padding: 0 22px; font-family: var(--display); font-size: 18px; letter-spacing: 1px; cursor: pointer; border: 1px solid var(--line); }
+.big.go { background: var(--green); color: #EFF3E2; border-color: var(--greenHi); }
+.big.alt { background: #2C2A21; color: var(--khaki); }
+.big:disabled { opacity: 0.45; cursor: default; }
+.muted { color: var(--muted); }
+.field { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.field select { padding: 6px 8px; font-size: 14px; min-height: 36px; }
+
+.orders { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.order { display: flex; flex-direction: column; gap: 8px; }
+.order > button:first-child { text-align: left; background: var(--paper); color: var(--paperInk); border: 1px solid #8E8369; box-shadow: 3px 3px 0 rgba(0,0,0,0.45); padding: 14px; cursor: pointer; min-height: 150px; display: flex; flex-direction: column; gap: 6px; font-family: var(--type); }
+.order > button:first-child:hover { outline: 2px solid var(--tanHi); }
+.order .tg { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #6B2E1E; }
+.order .on { font-family: var(--display); font-size: 20px; line-height: 1.05; }
+.order .od { font-size: 14px; line-height: 1.3; }
+.tier { font-size: 12px; font-weight: 600; letter-spacing: 1px; padding: 2px 8px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; }
+.tier.on { background: var(--tanHi); color: #1E1A10; border-color: var(--tanHi); }
+
+#sbBtn { top: 62px; left: 50%; transform: translateX(-50%); padding: 2px 10px; font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); cursor: pointer; min-height: 22px; }
+#sbBtn:hover { color: var(--khaki); }
+#sb { background: rgba(10,10,7,0.55); }
+.sbcard { width: min(1180px, 100%); gap: 14px; }
+.sbhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.sbmeta { display: flex; gap: 18px; flex-wrap: wrap; font-family: var(--type); font-size: 13px; color: var(--muted); }
+.sbmeta b { color: var(--khaki); font-weight: 400; }
+.sbtug { display: flex; height: 8px; border: 1px solid var(--line2); }
+.sbtug i { display: block; height: 100%; }
+.sbteam { display: flex; flex-direction: column; gap: 6px; }
+.sbteam header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 6px 10px; border-left: 4px solid var(--muted); background: rgba(0,0,0,0.25); }
+.sbteam.g header { border-left-color: var(--greenHi); }
+.sbteam.t header { border-left-color: var(--tan); }
+.sbteam h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 20px; letter-spacing: 1px; }
+.sbteam.g h3 { color: var(--greenHi); } .sbteam.t h3 { color: var(--tanHi); }
+.sbstats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); letter-spacing: 0.5px; }
+.sbstats b { color: var(--khaki); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sbwrap { overflow-x: auto; }
+.sbt { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; min-width: 860px; }
+.sbt th { text-align: right; font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.sbt th:first-child, .sbt td:first-child { text-align: left; }
+.sbt td { text-align: right; padding: 4px 8px; border-bottom: 1px solid rgba(214,203,170,0.08); white-space: nowrap; }
+.sbt tr.me td { background: rgba(214,203,170,0.1); }
+.sbt tr.down td { color: var(--muted); }
+.sbt .who { display: flex; align-items: center; gap: 8px; }
+.sbt .who img { width: 24px; height: 29px; flex: none; }
+.sbt .nm { font-weight: 600; letter-spacing: 0.5px; }
+.sbt .you { font-size: 10px; letter-spacing: 1.5px; background: var(--khaki); color: #1E1A10; padding: 0 5px; margin-left: 4px; }
+.sbt .lv { display: inline-block; min-width: 22px; text-align: center; background: var(--tanHi); color: #1E1A10; font-family: var(--display); font-size: 12px; }
+.sbt .best { color: #FFE29A; }
+.sbt .best::before { content: '\2605 '; font-size: 10px; }
+.sbt .st { font-family: var(--type); font-size: 12px; }
+.sbt .hp { display: inline-block; width: 54px; height: 5px; background: #0B0A08; vertical-align: middle; margin-left: 6px; }
+.sbt .hp i { display: block; height: 100%; }
+.sbfoot { font-size: 12px; font-family: var(--type); }
+@media (max-width: 760px) {
+  #feed, #squad, #help { display: none; }
+  #dev { width: 200px; }
+  #mini canvas { width: 150px; height: 93px; }
+  #bar { bottom: 112px; }
+  .pickGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .orders { grid-template-columns: 1fr; }
+  .ab { width: 48px; height: 46px; }
+  h1 { font-size: 30px; }
+}
+@media (prefers-reduced-motion: reduce) { #ordersBtn.ready { animation: none; } }
+</style>
+
+<div id="app">
+  <canvas id="game" aria-label="Plastic Front battlefield"></canvas>
+
+  <div id="score" class="hud plate" aria-live="off">
+    <div class="side g">GREEN <span class="num" id="kg">0</span></div>
+    <div class="mid"><div class="clock" id="clock">0:00</div><div class="forts" id="forts">POSITIONS 4 · 4</div></div>
+    <div class="side t"><span class="num" id="kt">0</span> TAN</div>
+  </div>
+  <button type="button" id="sbBtn" class="hud plate" aria-label="Show scoreboard">Tab · Scoreboard</button>
+  <div id="feed" class="hud"></div>
+  <div id="toast" class="hud"></div>
+
+  <details id="dev" class="hud plate">
+    <summary class="stencil"><span>Range control</span><span id="fps" class="stat">60 fps</span></summary>
+    <div class="body">
+      <label><input type="checkbox" id="dRanges"> Show weapon ranges</label>
+      <label><input type="checkbox" id="dCol"> Show collision and routes</label>
+      <label><input type="checkbox" id="dGod"> God mode (you)</label>
+      <label><input type="checkbox" id="dNoCd"> No cooldowns (you)</label>
+      <label><input type="checkbox" id="dPassive"> Tan holds fire</label>
+      <label><input type="checkbox" id="dSound" checked> Sound</label>
+      <label><input type="checkbox" id="dPause"> Pause</label>
+      <label class="field">Game speed
+        <select id="dSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+      </label>
+      <div class="row">
+        <button type="button" id="bWave">Spawn wave</button>
+        <button type="button" id="bLvl">+1 level</button>
+        <button type="button" id="bKill">Drop Tan heroes</button>
+        <button type="button" id="bFort">Take next position</button>
+        <button type="button" id="bSun">Start barrage</button>
+        <button type="button" id="bReset">New match</button>
+      </div>
+      <div class="stat" id="dStats">Units 0</div>
+    </div>
+  </details>
+
+  <div id="squad" class="hud"></div>
+
+  <div id="help" class="hud plate">
+    <span><b>Click</b> move / attack · <b>A</b>+click attack-move · <b>Q W E R</b> cast at cursor · <b>D</b> tag round · <b>F</b> hit the deck · <b>S</b> halt · <b>Space</b> center · <b>Y</b> camera lock · <b>O</b> orders · wheel zoom</span>
+    <button type="button" id="helpX" aria-label="Hide controls">Hide</button>
+  </div>
+
+  <div id="bar" class="hud plate">
+    <div id="portrait"><canvas id="portraitCv" width="128" height="152"></canvas><span id="lvl">3</span></div>
+    <div id="kit">
+      <div id="abil"></div>
+      <div class="bars">
+        <div class="hpb"><b id="shb"></b><i id="hpi"></i><span id="hpt">0 / 0</span></div>
+        <div class="xpb"><i id="xpi"></i></div>
+      </div>
+    </div>
+    <button type="button" id="ordersBtn">Field Orders</button>
+  </div>
+
+  <div id="mini" class="hud"><canvas id="miniCv" width="440" height="272" aria-label="Situation map"></canvas></div>
+
+  <div id="draft" class="overlay">
+    <div class="card plate">
+      <div class="eyebrow">ARAM · The Sunken Road · Playtest build</div>
+      <h1>Roll Call</h1>
+      <div class="draftRow">
+        <canvas id="draftFig" width="400" height="480"></canvas>
+        <div id="draftInfo">
+          <h2 id="dName">Bazooka</h2>
+          <div class="chips"><span class="chip" id="dRole">Burst</span><span class="chip tan" id="dRange">400 range</span></div>
+          <div class="dossier" id="dKit"></div>
+          <div class="actions">
+            <button type="button" class="big alt" id="shake">Request reassignment (1)</button>
+            <label class="field">Squads
+              <select id="squadSize"><option value="1">1 v 1</option><option value="3" selected>3 v 3</option><option value="5">5 v 5</option></select>
+            </label>
+            <button type="button" class="big go" id="deploy">Deploy</button>
+          </div>
+        </div>
+      </div>
+      <div class="muted">Test mode: pick any figure directly.</div>
+      <div class="pickGrid" id="pickGrid"></div>
+    </div>
+  </div>
+
+  <div id="ordersModal" class="overlay" hidden>
+    <div class="card plate">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="eyebrow" id="oLevel">Level 3</div>
+          <h2>Field Orders</h2>
+        </div>
+        <div class="chips"><span class="tier" id="tier0">Squad</span><span class="tier" id="tier1">Platoon</span><span class="tier" id="tier2">Company</span></div>
+      </div>
+      <div class="orders" id="orderCards"></div>
+      <div class="actions" style="justify-content:space-between">
+        <span class="muted" id="oHeld">Orders held: none</span>
+        <button type="button" class="btn" id="oClose">Back to the line</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="endModal" class="overlay" hidden>
+    <div class="card plate" style="width:min(560px,100%)">
+      <div class="eyebrow" id="endEyebrow">Match over</div>
+      <h1 id="endTitle">Objective secured</h1>
+      <div id="endStats" class="muted" style="font-size:16px;font-family:var(--type)"></div>
+      <div class="actions"><button type="button" class="big go" id="again">Roll call</button><button type="button" class="big alt" id="endSb">Full report</button></div>
+    </div>
+  </div>
+
+  <div id="sb" class="overlay" hidden role="dialog" aria-label="Scoreboard">
+    <div class="card plate sbcard">
+      <div class="sbhead">
+        <div style="display:flex;flex-direction:column;gap:4px"><div class="eyebrow">Hold Tab · The Sunken Road</div><h2>After-Action Report</h2></div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><div class="sbmeta" id="sbMeta"></div><button type="button" class="btn" id="sbClose">Close</button></div>
+      </div>
+      <div class="sbtug" id="sbTug" aria-hidden="true"></div>
+      <div id="sbTeams"></div>
+      <div class="sbfoot muted">K/D/A kills, deaths, assists · CS reserves killed · Heal/Shield includes shields given to allies · ★ best in that column</div>
+    </div>
+  </div>
+</div>
