@@ -25,7 +25,10 @@ ${head}
 <body>
 ${body}
 <script>
+(function () {
+'use strict';
 ${scripts}
+})();
 </script>
 </body>
 </html>

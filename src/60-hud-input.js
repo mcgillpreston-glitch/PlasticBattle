@@ -1,3 +1,4 @@
+/* Browser only: HUD, scoreboard, Field Orders UI, input, Roll Call, game loop. */
 
 /* ---------------- HUD ---------------- */
 var abilEl = document.getElementById('abil');
@@ -30,20 +31,22 @@ function hud() {
     if (u.dead) { el.hidden = false; el.textContent = ''; el.style.background = 'rgba(0,0,0,0.6)'; return; }
     var show = cd > 0 && !opts.nocd;
     el.hidden = !show;
-    if (show) { var pct = Math.round(100 * cd / Math.max(0.01, u.cdMax[s])); el.textContent = cd >= 1 ? Math.ceil(cd) : cd.toFixed(1); el.style.background = 'conic-gradient(rgba(0,0,0,0.82) ' + pct + '%, rgba(0,0,0,0.25) 0)'; }
+    if (show) { var pct = Math.round(100 * cd / Math.max(0.01, u.cdMax[s])); el.textContent = cd >= 1 ? Math.ceil(cd) : cd.toFixed(1); el.style.background = 'linear-gradient(to top, rgba(0,0,0,0.82) ' + pct + '%, rgba(0,0,0,0.25) 0)'; }
   });
   var mh = maxHp(u);
-  document.getElementById('hpi').style.width = (100 * clamp(u.hp / mh, 0, 1)) + '%';
+  var hpf = clamp(u.hp / mh, 0, 1), hpm = document.getElementById('hpi').parentNode;
+  document.getElementById('hpi').style.width = (100 * hpf) + '%';
+  hpm.classList.toggle('crit', !u.dead && hpf < 0.3); hpm.classList.toggle('warn', !u.dead && hpf >= 0.3 && hpf < 0.6);
   document.getElementById('shb').style.width = (100 * clamp((u.hp + u.shield) / mh, 0, 1)) + '%';
   document.getElementById('hpt').textContent = u.dead ? 'REINFORCING · ' + Math.ceil(u.respawn) + 'S' : Math.ceil(u.hp) + ' / ' + mh;
   document.getElementById('xpi').style.width = (100 * (u.lvl >= 18 ? 1 : u.xp / xpNeed(u.lvl))) + '%';
   document.getElementById('lvl').textContent = u.lvl;
   var ob = document.getElementById('ordersBtn'), owed = ordersOwed(u);
   ob.classList.toggle('ready', owed > 0 && atBase(u));
-  ob.textContent = owed > 0 ? (atBase(u) ? 'Orders ready' : 'Orders at CP (' + owed + ')') : 'Field Orders';
+  ob.textContent = owed > 0 ? (atBase(u) ? 'ORDERS READY' : 'ORDERS AT BASE (' + owed + ')') : 'FIELD ORDERS';
   var sq = document.getElementById('squad');
   sq.innerHTML = '';
-  G.units.filter(function (h) { return h.kind === 'hero' && h.team === 0 && !h.isPlayer; }).forEach(function (h) {
+  G.units.filter(function (h) { return h.kind === 'hero' && h.team === MYTEAM && !h.isPlayer; }).forEach(function (h) {
     var d = document.createElement('div'); d.className = 'mate' + (h.dead ? ' dead' : '');
     d.innerHTML = '<span class="nm"></span><span class="bar"><i></i></span>';
     d.querySelector('.nm').textContent = h.name + ' ' + h.lvl + (h.dead ? ' · ' + Math.ceil(h.respawn) + 's' : '');
@@ -82,7 +85,7 @@ function renderSB() {
   });
   var tot = teams[0].dmgH + teams[1].dmgH || 1;
   document.getElementById('sbTug').innerHTML = '<i style="width:' + (100 * teams[0].dmgH / tot).toFixed(1) + '%;background:var(--green)"></i><i style="flex:1;background:var(--tan)"></i>';
-  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b></span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Barrage active</b></span>' : '<span>Barrage at <b>18:00</b></span>');
+  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b></span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Sprinkler on</b></span>' : '<span>Sprinkler at <b>18:00</b></span>');
   var html = '';
   teams.forEach(function (T) {
     var cls = T.team === 0 ? 'g' : 't', name = T.team === 0 ? 'Green Army' : 'Tan Army';
@@ -95,12 +98,12 @@ function renderSB() {
     T.hs.forEach(function (h) {
       var b = function (c, v) { return '<td' + (best[c] > 0 && h.st[c] === best[c] ? ' class="best"' : '') + '>' + v + '</td>'; };
       var hpPct = Math.round(100 * clamp(h.hp / maxHp(h), 0, 1));
-      var status = h.dead ? '<span class="st">Reinforcing ' + Math.ceil(h.respawn) + 's</span>' : '<span class="st">' + (atBase(h) ? 'At CP' : 'In the field') + '</span><span class="hp"><i style="width:' + hpPct + '%;background:' + TEAMC[h.team].bar + '"></i></span>';
+      var status = h._hidden && h.team !== MYTEAM && !h.dead ? '<span class="st">Unseen</span>' : h.dead ? '<span class="st">Reinforcing ' + Math.ceil(h.respawn) + 's</span>' : '<span class="st">' + (atBase(h) ? 'At base' : 'In the field') + '</span><span class="hp"><i style="width:' + hpPct + '%;background:' + TEAMC[h.team].bar + '"></i></span>';
       html += '<tr class="' + (h.isPlayer ? 'me' : '') + (h.dead ? ' down' : '') + '"><td><span class="who"><img alt="" src="' + portrait(h.pose, h.team) + '"><span class="nm">' + h.name + '</span>' + (h.isPlayer ? '<span class="you">YOU</span>' : '') + '</span></td>' +
         '<td><span class="lv">' + h.lvl + '</span></td>' +
         '<td' + (best.k > 0 && h.st.k === best.k ? ' class="best"' : '') + '>' + h.st.k + ' / ' + h.st.d + ' / ' + h.st.a + '</td>' +
         b('cs', h.st.cs) + b('dmgH', kfmt(h.st.dmgH)) + b('dmgS', kfmt(h.st.dmgS)) + b('taken', kfmt(h.st.taken)) + b('heal', kfmt(h.st.heal)) +
-        '<td>' + h.st.best + '</td><td title="' + h.augs.map(function (a) { return a.n; }).join(', ') + '">' + h.augs.length + '</td><td>' + status + '</td></tr>';
+        '<td>' + h.st.best + '</td><td title="' + h.augs.map(function (a) { return typeof a === 'string' ? a : a.n; }).join(', ') + '">' + h.augs.length + '</td><td>' + status + '</td></tr>';
     });
     html += '</tbody></table></div></section>';
   });
@@ -116,19 +119,36 @@ function fmtTime(t) { var m = Math.floor(t / 60), s = Math.floor(t % 60); return
 /* ---------------- Input ---------------- */
 function pickAt(w) {
   var best = null, bd = 1e9;
-  G.units.forEach(function (u) { if (u.team === 0 || u.dead || !visibleTo(u, 0)) return; var h = unitH(u); var d = vlen(u.x - w.x, (u.y - h * 0.4) - w.y); if (d < Math.max(36, h * 0.5) && d < bd) { bd = d; best = u; } });
-  if (!best) G.structs.forEach(function (s) { if (s.team === 0 || s.dead) return; if (vlen(s.x - w.x, s.y - 60 - w.y) < s.r + 50) best = s; });
+  G.units.forEach(function (u) { if (u.team === MYTEAM || u.dead || !visibleTo(u, MYTEAM)) return; var h = unitH(u); var d = vlen(u.x - w.x, (u.y - h * 0.4) - w.y); if (d < Math.max(36, h * 0.5) && d < bd) { bd = d; best = u; } });
+  if (!best) G.structs.forEach(function (s) { if (s.team === MYTEAM || s.dead) return; if (vlen(s.x - w.x, s.y - 60 - w.y) < s.r + 50) best = s; });
   return best;
+}
+/* Player commands: applied directly offline, sent to the server online. */
+function cmdMove(pt, amove) {
+  if (NET.mode === 'online') { netSend({ t: 'move', x: Math.round(pt.x), y: Math.round(pt.y), a: amove ? 1 : 0 }); G.player.target = null; return; }
+  var u = G.player; u.target = null; u.move = pt; u.amove = amove ? pt : null;
+}
+function cmdTarget(t) {
+  if (NET.mode === 'online') { netSend({ t: 'atk', id: t.id }); G.player.target = t; return; }
+  var u = G.player; u.target = t; u.move = null; u.amove = null;
+}
+function cmdCast(slot, w) {
+  if (NET.mode === 'online') { netSend({ t: 'cast', s: slot, x: Math.round(w.x), y: Math.round(w.y) }); return; }
+  cast(G.player, slot, w);
+}
+function cmdHalt() {
+  if (NET.mode === 'online') { netSend({ t: 'halt' }); G.player.target = null; return; }
+  var u = G.player; u.move = null; u.target = null; u.amove = null;
 }
 function order(sx, sy) {
   var u = G.player; if (!u || u.dead || G.over) return;
   var w = s2w(sx, sy);
-  if (aimSlot) { cast(u, aimSlot, w); aimSlot = null; refreshAim(); return; }
+  if (aimSlot) { cmdCast(aimSlot, w); aimSlot = null; refreshAim(); return; }
   var t = pickAt(w);
-  if (t && !aMovePending) { u.target = t; u.move = null; u.amove = null; G.moveMark = null; fx({ k: 'ring', x: t.x, y: t.y, r: 40, t: 0, dur: 0.3, c: '#D9532F' }); }
+  if (t && !aMovePending) { cmdTarget(t); G.moveMark = null; addFx({ k: 'ring', x: t.x, y: t.y, r: 40, t: 0, dur: 0.3, c: '#D9532F' }); }
   else {
     var pt = freePoint(w, u.r);
-    u.target = null; u.move = pt; u.amove = aMovePending ? pt : null;
+    cmdMove(pt, aMovePending);
     G.moveMark = { x: pt.x, y: pt.y, t: 1.2 };
   }
   aMovePending = false;
@@ -158,6 +178,7 @@ cv.addEventListener('wheel', function (e) { e.preventDefault(); cam.zSet = true;
 mini.addEventListener('pointerdown', function (e) {
   var r = mini.getBoundingClientRect(); cam.lock = false;
   cam.x = (e.clientX - r.left) / r.width * MAP.W; cam.y = (e.clientY - r.top) / r.height * MAP.H;
+  if (G && G.player && !G.player.dead && e.shiftKey) { var wp = { x: cam.x, y: cam.y }; cmdMove(freePoint(wp, G.player.r), false); }
 });
 window.addEventListener('keydown', function (e) {
   if (!G || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
@@ -168,11 +189,11 @@ window.addEventListener('keydown', function (e) {
   if (['Q', 'W', 'E', 'R', 'D', 'F'].indexOf(k) >= 0) {
     if (!ordersModal.hidden) return;
     var w = mouse.inside ? s2w(mouse.x, mouse.y) : { x: G.player.x + G.player.facing * 200, y: G.player.y };
-    cast(G.player, k, w); e.preventDefault();
+    cmdCast(k, w); e.preventDefault();
   } else if (k === 'A') { aMovePending = true; }
-  else if (k === 'S') { G.player.move = null; G.player.target = null; G.player.amove = null; aMovePending = false; }
+  else if (k === 'S') { cmdHalt(); aMovePending = false; }
   else if (k === ' ') { cam.lock = true; e.preventDefault(); }
-  else if (k === 'Y') { cam.lock = !cam.lock; toast(cam.lock ? 'Camera locked' : 'Camera free', 1); }
+  else if (k === 'Y') { cam.lock = !cam.lock; showToast(cam.lock ? 'Camera locked' : 'Camera free', 1); }
   else if (k === 'O') { if (ordersModal.hidden) openOrders(); else ordersModal.hidden = true; }
   else if (k === 'ESCAPE') { aimSlot = null; aMovePending = false; refreshAim(); ordersModal.hidden = true; }
   else if (k === '`') { var d = document.getElementById('dev'); d.open = !d.open; }
@@ -190,13 +211,62 @@ document.getElementById('bFort').addEventListener('click', function () { if (!G)
 document.getElementById('bSun').addEventListener('click', function () { if (G) startBarrage(); });
 document.getElementById('bReset').addEventListener('click', showDraft);
 
+
+/* ---------------- Field Orders UI ---------------- */
+var ordersModal = document.getElementById('ordersModal');
+function offerView(u) {
+  var off = u.offer; if (!off) return null;
+  if (NET.mode === 'online') return off;
+  return { tier: off.tier, cards: off.cards.map(function (c) { return { n: c.o.n, d: c.o.d, r: c.rerolled }; }), spare: off.spare.length };
+}
+function openOrders() {
+  var u = G && G.player; if (!u || G.over) return;
+  if (ordersOwed(u) <= 0) { showToast('No Field Orders waiting. Next at level ' + (ORDER_LEVELS.find(function (l) { return l > u.lvl; }) || '-'), 1.8); return; }
+  if (!atBase(u)) { showToast('Field Orders are issued at your base or while reinforcing', 1.8); return; }
+  if (NET.mode === 'local') { if (!u.offer) rollOffer(u); }
+  else if (!u.offer) { netSend({ t: 'orders' }); NET.wantOrders = true; showToast('Requisitioning orders\u2026', 1); return; }
+  renderOrders();
+  ordersModal.hidden = false;
+}
+function renderOrders() {
+  var u = G.player, off = offerView(u);
+  if (!off) { ordersModal.hidden = true; return; }
+  document.getElementById('oLevel').textContent = 'Level ' + ORDER_LEVELS[u.ordersDone] + ' order \u00b7 ' + TIERS[off.tier] + ' tier';
+  [0, 1, 2].forEach(function (i) { document.getElementById('tier' + i).classList.toggle('on', i === off.tier); });
+  var wrap = document.getElementById('orderCards'); wrap.innerHTML = '';
+  off.cards.forEach(function (c, i) {
+    var d = document.createElement('div'); d.className = 'order';
+    var pick = document.createElement('button'); pick.type = 'button';
+    pick.innerHTML = '<span class="tg"></span><span class="on"></span><span class="od"></span>';
+    pick.querySelector('.tg').textContent = TIERS[off.tier] + ' order';
+    pick.querySelector('.on').textContent = c.n;
+    pick.querySelector('.od').textContent = c.d;
+    pick.addEventListener('click', function () {
+      ordersModal.hidden = true; showToast(c.n + ' issued', 1.6); playSfx('ui');
+      if (NET.mode === 'online') { netSend({ t: 'pick', i: i }); u.offer = null; NET.wantOrders = ordersOwed(u) > 1; return; }
+      applyOrder(u, u.offer.cards[i].o);
+      if (ordersOwed(u) > 0) { rollOffer(u); openOrders(); }
+    });
+    var rr = document.createElement('button'); rr.type = 'button'; rr.className = 'btn';
+    rr.textContent = c.r ? 'Redrawn' : 'Redraw this order';
+    rr.disabled = c.r || !off.spare;
+    rr.addEventListener('click', function () {
+      if (NET.mode === 'online') { netSend({ t: 'redraw', i: i }); rr.disabled = true; return; }
+      var lo = u.offer; if (!lo.spare.length) return; lo.cards[i].o = lo.spare.shift(); lo.cards[i].rerolled = true; renderOrders();
+    });
+    d.appendChild(pick); d.appendChild(rr); wrap.appendChild(d);
+  });
+  document.getElementById('oHeld').textContent = 'Orders held: ' + (u.augs.length ? u.augs.map(function (a) { return typeof a === 'string' ? a : a.n; }).join(', ') : 'none');
+}
+document.getElementById('oClose').addEventListener('click', function () { ordersModal.hidden = true; });
+
 /* ---------------- Roll call ---------------- */
 var draft = { idx: 3, shakes: 1 };
 var draftEl = document.getElementById('draft');
 function showDraft() {
   draft.idx = Math.floor(Math.random() * HEROES.length); draft.shakes = 1;
   document.getElementById('endModal').hidden = true; ordersModal.hidden = true; closeSB();
-  draftEl.hidden = false; renderDraft();
+  draftEl.hidden = false; setTab(false); renderDraft();
 }
 function renderDraft() {
   var h = HEROES[draft.idx];
@@ -219,7 +289,7 @@ document.getElementById('deploy').addEventListener('click', function () {
   draftEl.hidden = true;
   document.getElementById('help').hidden = false;
 });
-document.getElementById('again').addEventListener('click', showDraft);
+document.getElementById('again').addEventListener('click', function () { if (NET.mode === 'online') backToLobby(); else showDraft(); });
 
 /* ---------------- Loop ---------------- */
 var last = performance.now(), fpsAcc = 0, fpsN = 0;
@@ -227,12 +297,15 @@ function frame(now) {
   var raw = Math.min(0.05, (now - last) / 1000); last = now;
   fpsAcc += raw; fpsN++;
   if (fpsAcc > 0.5) { document.getElementById('fps').textContent = Math.round(fpsN / fpsAcc) + ' fps'; fpsAcc = 0; fpsN = 0; }
-  if (G && !opts.pause && draftEl.hidden && ordersModal.hidden) {
+  if (NET.mode === 'local' && G && !opts.pause && draftEl.hidden && ordersModal.hidden) {
+    if (G.player && mouse.inside) G.player.aimPt = { x: mouse.wx, y: mouse.wy };
     var dt = raw * opts.speed, steps = Math.ceil(dt / 0.034);
     for (var i = 0; i < steps; i++) update(dt / steps);
-  }
-  if (G) {
-    if (cam.lock) { var tgt = G.player.dead ? fountain(0) : G.player, k = Math.min(1, raw * 14); cam.x += (tgt.x - cam.x) * k; cam.y += (tgt.y - cam.y) * k; }
+    presentLocal();
+  } else if (NET.mode === 'online') netFrame(raw);
+  updateVisuals(raw);
+  if (G && G.player) {
+    if (cam.lock) { var tgt = G.player.dead ? fountain(MYTEAM) : G.player, k = Math.min(1, raw * 14); cam.x += (tgt.x - cam.x) * k; cam.y += (tgt.y - cam.y) * k; }
     var mw = s2w(mouse.x, mouse.y); mouse.wx = mw.x; mouse.wy = mw.y;
     hudT -= raw; if (hudT <= 0) { hudT = 0.1; hud(); }
   }
@@ -243,9 +316,9 @@ function start() {
   resize(); checkBlend(); makeGrain(); terrain = buildTerrain();
   newGame(3, 3);
   showDraft();
+  if (NETC.inviteCode) setTab(true);
   requestAnimationFrame(frame);
 }
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(start, start); else start();
 
-window.__PF = { get G() { return G; }, update: update, newGame: newGame, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, LLEN: LLEN, MAP: MAP, LANG: LANG, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG };
-})();
+window.__PF = { get G() { return G; }, get NET() { return NET; }, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, LLEN: LLEN, MAP: MAP, LANG: LANG, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG };

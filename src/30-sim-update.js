@@ -1,3 +1,4 @@
+/* Shared simulation: update loop, AI, projectiles, Field Orders rules. No DOM access. */
 
 /* ---------------- Update ---------------- */
 function update(dt) {
@@ -5,11 +6,6 @@ function update(dt) {
   G.time += dt;
   G.nextWave -= dt;
   if (G.nextWave <= 0) { spawnWave(); G.nextWave = 25; }
-  if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) toastEl.textContent = ''; }
-  if (G.hurtT > 0) G.hurtT -= dt;
-  if (G.moveMark) { G.moveMark.t -= dt; if (G.moveMark.t <= 0) G.moveMark = null; }
-  G.feed.forEach(function (f) { f.t -= dt; });
-  if (G.feed.length && G.feed[G.feed.length - 1].t <= 0) { G.feed = G.feed.filter(function (f) { return f.t > 0; }); renderFeed(); }
 
   G.crates.forEach(function (c) {
     if (!c.up) { c.t -= dt; if (c.t <= 0) c.up = true; return; }
@@ -18,7 +14,7 @@ function update(dt) {
       if (h.kind === 'hero' && !h.dead && dist(h, c) < 46) {
         var amt = maxHp(h) * 0.22 * (h.aug.crate ? 2 : 1); h.hp = Math.min(maxHp(h), h.hp + amt);
         c.up = false; c.t = 40; fx({ k: 'ring', x: c.x, y: c.y, r: 60, t: 0, dur: 0.4, c: '#F5EFD8' });
-        if (h.isPlayer) { floatText(h.x, h.y - 100, '+' + Math.round(amt), '#B8E07A'); sfx('ui'); }
+        emit('heal', h.id, Math.round(amt));
         break;
       }
     }
@@ -30,21 +26,15 @@ function update(dt) {
   G.units.forEach(function (u) { if (!u.dead) keepInWorld(u); });
   updateProj(dt);
   updateRounds(dt);
-  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 28);
   updateLobs(dt);
   updateMines(dt);
   updateBarrage(dt);
-  G.fx = G.fx.filter(function (f) { f.t += dt; if (f.k === 'chip') { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 520 * dt; } return f.t < f.dur; });
-  G.texts = G.texts.filter(function (t) { t.t += dt; t.y -= 40 * dt; return t.t < 0.9; });
   G.units = G.units.filter(function (u) { if (u.kind === 'minion' && u.dead) { u.deathT += dt; return u.deathT < 1.4; } return true; });
 }
 
 function updateStruct(s, dt) {
-  if (s.flashT > 0) s.flashT -= dt;
-  if (s.recoilT > 0) s.recoilT -= dt;
   if (s.dead) {
-    if (s.kind === 'depot' && s.respawn > 0) { s.respawn -= dt; if (s.respawn <= 0) { s.dead = false; s.hp = s.maxHp; rebuildBlockers(); feed((s.team === 0 ? 'Green' : 'Tan') + ' supply dump rebuilt', s.team === 0 ? 'fg' : 'ft'); } }
-    if (Math.random() < dt * 3) fx({ k: 'smoke', x: s.x + rnd(-30, 30), y: s.y - rnd(10, 60), t: 0, dur: 1.4, big: 1 });
+    if (s.kind === 'depot' && s.respawn > 0) { s.respawn -= dt; if (s.respawn <= 0) { s.dead = false; s.hp = s.maxHp; rebuildBlockers(); feed((s.team === 0 ? 'Green' : 'Tan') + ' supply bucket refilled', s.team === 0 ? 'fg' : 'ft'); } }
     return;
   }
   if (s.kind === 'depot') return;
@@ -68,19 +58,13 @@ function updateStruct(s, dt) {
     G.rounds.push({ x: mx, y: my, tgt: t, spd: hq ? 1400 : 2600, dmg: base, owner: s, team: s.team, heavy: hq, life: 1.2, lx: t.x, ly: t.y });
     fx({ k: 'muzzle', x: mx, y: my, a: Math.atan2(t.y - my, t.x - mx), t: 0, dur: 0.1, s: hq ? 2.2 : 1.6 });
     fx({ k: 'glow', x: mx, y: s.y, t: 0, dur: 0.1, r: 80 });
-    s.recoilT = 0.1;
+    anim(s, 'f');
     sfx(hq ? 'cannon' : 'mg', s.x, s.y);
   }
 }
 
 function updateUnit(u, dt) {
-  if (u.flashT > 0) u.flashT -= dt;
-  if (u.recoilT > 0) u.recoilT -= dt;
-  if (u.movedT > 0) u.movedT -= dt;
   if (u.pathCd > 0) u.pathCd -= dt;
-  if (u.fireT > 0) u.fireT -= dt;
-  if (u.stagT > 0) u.stagT -= dt;
-  if (u.lungeT > 0) u.lungeT -= dt;
   if (u.dead) {
     u.deathT += dt;
     if (u.kind === 'hero') {
@@ -109,7 +93,6 @@ function updateUnit(u, dt) {
       enemiesNear(u.team, u, ar, false).forEach(function (e) { damage(u, e, aura * dmgMul(u) * dt, { ability: 1, tick: 1 }); });
       var sd = sumBuff(u, 'selfdps'); if (sd) damage(null, u, sd * dt, { tick: 1 });
       if (u.dead) return;
-      if (Math.random() < dt * 14) fx({ k: 'flame', x: u.x + rnd(-ar, ar) * 0.7, y: u.y + rnd(-ar, ar) * 0.5, t: 0, dur: 0.4 });
     }
     if (u.bot && ordersOwed(u) > 0 && atBase(u)) botPickOrder(u);
   }
@@ -121,9 +104,7 @@ function updateUnit(u, dt) {
   if (u.dash) {
     var d = u.dash; d.t += dt; var p = Math.min(1, d.t / d.dur);
     u.x = d.fx + (d.tx - d.fx) * p; u.y = d.fy + (d.ty - d.fy) * p;
-    u.walk += vlen(d.tx - d.fx, d.ty - d.fy) * dt / d.dur; u.movedT = 0.12;
     if (d.dmg) enemiesNear(u.team, u, 60, false).forEach(function (e) { if (!d.hit[e.id]) { d.hit[e.id] = 1; damage(u, e, d.dmg, { ability: 1 }); } });
-    if (Math.random() < 0.6) fx({ k: 'dust', x: u.x, y: u.y, t: 0, dur: 0.4 });
     if (p >= 1) {
       if (d.land) {
         fx({ k: 'boom', x: u.x, y: u.y, r: d.land.r, t: 0, dur: 0.45 });
@@ -139,14 +120,13 @@ function updateUnit(u, dt) {
     var c = u.cone; c.t += dt; c.tick += dt;
     if (c.ab.dur > 0.1) {
       while (c.tick >= 0.1) { c.tick -= 0.1; coneHit(u, c.ab, c.dir, c.ab.dmg * c.dm / (c.ab.dur / 0.1)); }
-      if (Math.random() < 0.9) fx({ k: 'cone', x: u.x, y: u.y - 30, a: Math.atan2(c.dir.y, c.dir.x), ang: c.ab.ang, r: c.ab.range, t: 0, dur: 0.15, c: c.ab.n === 'Sweep' ? '#FF9A3D' : '#FFE29A' });
       if (c.ab.n !== 'Sweep' && Math.random() < 0.5) { var cm = muzzle(u); fx({ k: 'muzzle', x: cm.x, y: cm.y, a: Math.atan2(c.dir.y, c.dir.x), t: 0, dur: 0.06, s: 1 }); sfx('mg', u.x, u.y); }
     } else if (c.t < 0.02) fx({ k: 'cone', x: u.x, y: u.y - 30, a: Math.atan2(c.dir.y, c.dir.x), ang: c.ab.ang, r: c.ab.range, t: 0, dur: 0.2, c: '#FFE29A' });
     if (c.t >= c.ab.dur) u.cone = null;
   }
   if (u.chan) {
     var ch = u.chan; ch.t += dt; ch.acc += dt;
-    var aim = u.isPlayer ? { x: mouse.wx, y: mouse.wy } : (u.target && !u.target.dead ? u.target : null);
+    var aim = u.isPlayer ? (u.aimPt || null) : (u.target && !u.target.dead ? u.target : null);
     if (aim) {
       var ax = aim.x - u.x, ay = aim.y - u.y;
       if (Math.abs(ax) > 4) u.facing = ax < 0 ? -1 : 1;
@@ -155,7 +135,7 @@ function updateUnit(u, dt) {
         var ang = Math.atan2(ay, ax) + rnd(-ch.ab.spread, ch.ab.spread), mz = muzzle(u);
         G.proj.push({ x: mz.x, y: mz.y, vx: Math.cos(ang) * 1700, vy: Math.sin(ang) * 1700, life: ch.ab.range / 1700, team: u.team, owner: u, w: 14, dmg: ch.ab.dmg * ch.dm, hit: {}, kind: 'bullet' });
         fx({ k: 'muzzle', x: mz.x, y: mz.y, a: ang, t: 0, dur: 0.05, s: 1 });
-        u.recoilT = 0.06;
+        anim(u, 'r');
         sfx('mg', u.x, u.y);
       }
     }
@@ -184,10 +164,9 @@ function updateUnit(u, dt) {
   } else if (u.move && spd > 0) {
     u.wind = null;
     wantMove = true;
-    if (goalTaken(u) || stepToward(u, u.move.x, u.move.y, spd * dt, 4)) { wantMove = false; u.move = null; if (u.isPlayer) { u.amove = null; G.moveMark = null; } }
+    if (goalTaken(u) || stepToward(u, u.move.x, u.move.y, spd * dt, 4)) { wantMove = false; u.move = null; u.amove = null; }
   }
   watchdog(u, dt, wantMove, spd);
-  if (u.movedT > 0 && Math.random() < dt * 5) fx({ k: 'dust', x: u.x + rnd(-8, 8), y: u.y + 2, t: 0, dur: 0.45 });
   keepInWorld(u);
 }
 function goalTaken(u) {
@@ -207,7 +186,7 @@ function attack(u, t) {
   u.aaT = Math.max(0.05, aaCd(u) - windTime(u));
   var dmg = aaDmg(u), style = aaStyle(u);
   var mz = muzzle(u), ap = aimPoint(t), ang = Math.atan2(ap.y - mz.y, ap.x - mz.x), hero = u.kind === 'hero';
-  u.recoilT = style === 'tank' ? 0.2 : 0.12; u.fireT = style === 'tank' ? 0.2 : 0.14;
+  anim(u, style === 'tank' ? 'F' : 'f');
   if (style === 'shell') {
     G.lobs.push({ x: t.x, y: t.y, sx: u.x, sy: u.y - 50, t: 0, delay: 0.5, r: 60, dmg: dmg, team: u.team, owner: u, single: t });
     fx({ k: 'muzzle', x: mz.x, y: mz.y - 20, a: -Math.PI / 2, t: 0, dur: 0.12, s: 1.6 });
@@ -216,7 +195,7 @@ function attack(u, t) {
     return;
   }
   if (style === 'melee') {
-    u.lungeT = 0.16;
+    anim(u, 'l');
     fx({ k: 'slash', x: ap.x, y: ap.y, t: 0, dur: 0.22, dir: u.facing, big: hero });
     fx({ k: 'impact', x: ap.x, y: ap.y, t: 0, dur: 0.18, heavy: false, team: u.team });
     sfx('melee', u.x, u.y);
@@ -243,8 +222,7 @@ function attack(u, t) {
 }
 function hitFeedback(src, t, dir) {
   if (t.isStruct) return;
-  t.stagT = 0.14; t.stagDir = dir;
-  if (src && src.isPlayer) { var ap = aimPoint(t); fx({ k: 'hitmark', x: ap.x, y: ap.y, t: 0, dur: 0.18 }); }
+  emit('h', t.id, dir, src ? src.id : 0);
 }
 function updateRounds(dt) {
   G.rounds = G.rounds.filter(function (r) {
@@ -388,7 +366,6 @@ function updateProj(dt) {
     }
     for (var k = 0; k < PROP_C.length && !done; k++) { var pr = PROP_C[k]; if (surfDist(pr, p.x, p.y + 20) < 0) { if (p.aoe) explode(p); else fx({ k: 'spark', x: p.x, y: p.y, t: 0, dur: 0.15 }); done = true; } }
     if (!done && p.life <= 0) { if (p.aoe) explode(p); done = true; }
-    if (p.rocket && Math.random() < 0.8) fx({ k: 'smoke', x: p.x, y: p.y, t: 0, dur: 0.5 });
     return !done;
   });
 }
@@ -423,8 +400,8 @@ function updateMines(dt) {
 function startBarrage() {
   if (G.barrage) return;
   G.barrage = { beams: [ { t: 0.5, dir: -1, acc: 0 }, { t: 0.5, dir: 1, acc: 0.15 } ], r: 150 };
-  toast('Rolling barrage on the road. Push or die.', 3);
-  feed('Artillery walking outward from the centre', '');
+  emit('sprinkler');
+  feed('The sprinkler came on: water sweeping out from the centre', '');
 }
 function updateBarrage(dt) {
   if (!G.barrage && G.time > 18 * 60) startBarrage();
@@ -434,7 +411,7 @@ function updateBarrage(dt) {
     var c = lanePt(b.t, Math.sin(G.time * 0.9 + b.dir) * 90); b.x = c.x; b.y = c.y;
     G.units.forEach(function (u) { if (!u.dead && dist(u, b) < G.barrage.r) damage(null, u, (u.kind === 'hero' ? 140 : 220) * dt, { tick: 1 }); });
     b.acc -= dt;
-    if (b.acc <= 0) { b.acc = 0.22; var a = rnd(0, Math.PI * 2), rr = Math.random() * G.barrage.r; fx({ k: 'boom', x: b.x + Math.cos(a) * rr, y: b.y + Math.sin(a) * rr * 0.6, r: 60, t: 0, dur: 0.4 }); sfx('boom', b.x, b.y); }
+    if (b.acc <= 0) { b.acc = 0.22; var a = rnd(0, Math.PI * 2), rr = Math.random() * G.barrage.r; fx({ k: 'splash', x: b.x + Math.cos(a) * rr, y: b.y + Math.sin(a) * rr * 0.6, t: 0, dur: 0.5 }); sfx('splash', b.x, b.y); }
   });
 }
 function separate(dt) {
@@ -453,14 +430,6 @@ function separate(dt) {
       }
     }
   }
-}
-function endGame(winner) {
-  G.over = true;
-  var p = G.player;
-  document.getElementById('endTitle').textContent = winner === 0 ? 'Objective secured' : 'Position lost';
-  document.getElementById('endEyebrow').textContent = winner === 0 ? 'Tan pillbox destroyed' : 'Green command post overrun';
-  document.getElementById('endStats').textContent = 'Match time ' + fmtTime(G.time) + ' · You fought as ' + p.name + ' · ' + p.kills + ' kills, ' + p.deaths + ' casualties · Level ' + p.lvl;
-  document.getElementById('endModal').hidden = false;
 }
 
 /* ---------------- Field Orders ---------------- */
@@ -483,34 +452,3 @@ function botPickOrder(u) {
   var c = u.offer.cards[Math.floor(Math.random() * u.offer.cards.length)];
   if (c) applyOrder(u, c.o); else { u.ordersDone++; u.offer = null; }
 }
-var ordersModal = document.getElementById('ordersModal');
-function openOrders() {
-  var u = G && G.player; if (!u || G.over) return;
-  if (ordersOwed(u) <= 0) { toast('No Field Orders waiting. Next at level ' + (ORDER_LEVELS.find(function (l) { return l > u.lvl; }) || '-'), 1.8); return; }
-  if (!atBase(u)) { toast('Field Orders are issued at the CP or while reinforcing', 1.8); return; }
-  if (!u.offer) rollOffer(u);
-  renderOrders();
-  ordersModal.hidden = false;
-}
-function renderOrders() {
-  var u = G.player, off = u.offer;
-  document.getElementById('oLevel').textContent = 'Level ' + ORDER_LEVELS[u.ordersDone] + ' order · ' + TIERS[off.tier] + ' tier';
-  [0, 1, 2].forEach(function (i) { document.getElementById('tier' + i).classList.toggle('on', i === off.tier); });
-  var wrap = document.getElementById('orderCards'); wrap.innerHTML = '';
-  off.cards.forEach(function (c) {
-    var d = document.createElement('div'); d.className = 'order';
-    var pick = document.createElement('button'); pick.type = 'button';
-    pick.innerHTML = '<span class="tg"></span><span class="on"></span><span class="od"></span>';
-    pick.querySelector('.tg').textContent = TIERS[off.tier] + ' order';
-    pick.querySelector('.on').textContent = c.o.n;
-    pick.querySelector('.od').textContent = c.o.d;
-    pick.addEventListener('click', function () { applyOrder(u, c.o); ordersModal.hidden = true; toast(c.o.n + ' issued', 1.6); sfx('ui'); if (ordersOwed(u) > 0) { rollOffer(u); openOrders(); } });
-    var rr = document.createElement('button'); rr.type = 'button'; rr.className = 'btn';
-    rr.textContent = c.rerolled ? 'Redrawn' : 'Redraw this order';
-    rr.disabled = c.rerolled || !off.spare.length;
-    rr.addEventListener('click', function () { if (!off.spare.length) return; c.o = off.spare.shift(); c.rerolled = true; renderOrders(); });
-    d.appendChild(pick); d.appendChild(rr); wrap.appendChild(d);
-  });
-  document.getElementById('oHeld').textContent = 'Orders held: ' + (u.augs.length ? u.augs.map(function (a) { return a.n; }).join(', ') : 'none');
-}
-document.getElementById('oClose').addEventListener('click', function () { ordersModal.hidden = true; });
