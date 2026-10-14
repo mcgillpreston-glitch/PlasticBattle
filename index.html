@@ -18,7 +18,6 @@
   --body: 'Oswald', 'Arial Narrow', 'Helvetica Neue', sans-serif;
   --mono: 'Share Tech Mono', 'Courier New', monospace;
   --type: 'Share Tech Mono', 'Courier New', monospace;
-  --side: 212px;
   color-scheme: dark;
 }
 html, body { height: 100%; }
@@ -57,7 +56,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 #top #sbBtn { margin-left: auto; align-self: center; }
 
 /* EVA alert */
-#alert { top: 54px; left: 0; right: var(--side); text-align: center; font-family: var(--display); font-size: 20px; letter-spacing: 3px; text-transform: uppercase; pointer-events: none; }
+#alert { top: 54px; left: 0; right: 0; text-align: center; font-family: var(--display); font-size: 20px; letter-spacing: 3px; text-transform: uppercase; pointer-events: none; }
 #alert.on { animation: evaBlink 0.5s steps(2, end) infinite; }
 #alert.bad { color: var(--redHi); text-shadow: 0 0 10px rgba(255,59,59,0.7), 0 2px 0 #000; }
 #alert.good { color: var(--amber2); text-shadow: 0 0 10px rgba(255,210,74,0.6), 0 2px 0 #000; }
@@ -65,51 +64,49 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 @keyframes evaBlink { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { #alert.on, .ra-btn.ready, .ra-radar .scan { animation: none; } }
 
-#feed { top: 84px; left: 10px; width: 300px; display: flex; flex-direction: column; gap: 3px; pointer-events: none; }
+#feed { top: 54px; right: 10px; width: 300px; display: flex; flex-direction: column; gap: 3px; pointer-events: none; }
 #feed div { background: rgba(11,13,16,0.82); border-left: 3px solid var(--muted); padding: 3px 8px; font-family: var(--mono); font-size: 12px; color: var(--text); }
 #feed .fg { border-left-color: var(--greenHi); }
 #feed .ft { border-left-color: var(--tanHi); }
-#toast { top: 90px; left: 0; right: var(--side); text-align: center; font-family: var(--mono); font-size: 14px; color: var(--amber2); text-shadow: 0 1px 0 #000; pointer-events: none; }
+#toast { top: 90px; left: 0; right: 0; text-align: center; font-family: var(--mono); font-size: 14px; color: var(--amber2); text-shadow: 0 1px 0 #000; pointer-events: none; }
 
-/* command sidebar */
-#side { top: 44px; right: 0; bottom: 0; width: var(--side); display: flex; flex-direction: column; gap: 6px; padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)); background: var(--metal); border-left: 2px solid var(--bevelHi); box-shadow: -3px 0 12px rgba(0,0,0,0.5); background-image: repeating-linear-gradient(90deg, transparent 0 6px, rgba(255,255,255,0.015) 6px 7px); overflow: hidden; }
-#side > * { pointer-events: auto; }
-.ra-radar { position: relative; aspect-ratio: 440 / 272; max-width: 100%; background: #071A0B; border-top: 2px solid var(--bevelLo); border-left: 2px solid var(--bevelLo); border-right: 2px solid var(--bevelHi); border-bottom: 2px solid var(--bevelHi); overflow: hidden; }
-.ra-radar canvas { display: block; width: 100%; height: 100%; cursor: pointer; }
-.ra-radar .scan { position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(180deg, rgba(0,0,0,0) 0 2px, rgba(0,0,0,0.18) 2px 3px); }
-.ra-radar .bezel { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 18px rgba(0,0,0,0.7); }
-.ra-tabs { display: flex; gap: 6px; }
-.ra-tabs .ra-btn { flex: 1; }
-.ra-unit { display: flex; gap: 8px; align-items: stretch; }
-#portrait { width: 56px; height: 66px; flex: none; position: relative; background: var(--metal3); border-top: 2px solid var(--bevelLo); border-left: 2px solid var(--bevelLo); border-right: 2px solid var(--bevelHi); border-bottom: 2px solid var(--bevelHi); }
-#portrait canvas { width: 52px; height: 62px; display: block; }
+/* bottom command bar */
+#bar { bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: stretch; gap: 10px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); max-width: calc(100% - 20px); background-image: linear-gradient(rgba(255,255,255,0.04), rgba(0,0,0,0.18)), repeating-linear-gradient(90deg, transparent 0 6px, rgba(255,255,255,0.015) 6px 7px); }
+#portrait { width: 64px; flex: none; position: relative; background: var(--metal3); border-top: 2px solid var(--bevelLo); border-left: 2px solid var(--bevelLo); border-right: 2px solid var(--bevelHi); border-bottom: 2px solid var(--bevelHi); }
+#portrait canvas { width: 60px; height: 72px; display: block; }
 #lvl { position: absolute; right: -6px; bottom: -6px; background: var(--amber); color: #000; font-family: var(--mono); font-size: 12px; padding: 1px 5px; border: 1px solid #000; }
-.ra-meters { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; justify-content: center; }
-.meter { position: relative; height: 18px; background: #000; border-top: 2px solid var(--bevelLo); border-left: 2px solid var(--bevelLo); border-right: 2px solid var(--bevelHi); border-bottom: 2px solid var(--bevelHi); overflow: hidden; }
+#kit { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ra-meters { display: flex; flex-direction: column; gap: 4px; }
+.meter { position: relative; height: 16px; background: #000; border-top: 2px solid var(--bevelLo); border-left: 2px solid var(--bevelLo); border-right: 2px solid var(--bevelHi); border-bottom: 2px solid var(--bevelHi); overflow: hidden; }
 .meter i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--green); background-image: repeating-linear-gradient(90deg, transparent 0 6px, rgba(0,0,0,0.5) 6px 8px); }
 .meter.hp.warn i { background-color: var(--amber); }
 .meter.hp.crit i { background-color: var(--red); animation: raPulse 0.5s steps(2, end) infinite; }
 .meter b { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(120,200,255,0.6); }
-.meter span { position: relative; padding-left: 5px; font-family: var(--mono); font-size: 11px; line-height: 14px; color: #fff; text-shadow: 0 1px 0 #000; }
-.meter.xp { height: 7px; }
+.meter span { position: relative; padding-left: 6px; font-family: var(--mono); font-size: 11px; line-height: 12px; color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px #000; }
+.meter.xp { height: 6px; }
 .meter.xp i { background: var(--amber); background-image: none; }
-.ra-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
-.ab { position: relative; height: 54px; background: var(--metal2); border-top: 2px solid var(--bevelHi); border-left: 2px solid var(--bevelHi); border-right: 2px solid var(--bevelLo); border-bottom: 2px solid var(--bevelLo); color: var(--text); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2px; overflow: hidden; }
+.ra-grid { display: flex; gap: 6px; }
+.ab { position: relative; width: 60px; height: 56px; background: var(--metal2); border-top: 2px solid var(--bevelHi); border-left: 2px solid var(--bevelHi); border-right: 2px solid var(--bevelLo); border-bottom: 2px solid var(--bevelLo); color: var(--text); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2px; overflow: hidden; }
 .ab.util { background: var(--metal3); }
 .ab.ult { box-shadow: inset 0 0 0 2px var(--red); }
 .ab .k { font-family: var(--display); font-size: 16px; line-height: 1; color: var(--amber2); }
-.ab .n { font-family: var(--mono); font-size: 10px; line-height: 1.05; text-align: center; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text); }
-.ab .cd { position: absolute; inset: 0; color: var(--amber2); font-family: var(--mono); font-size: 18px; display: flex; align-items: center; justify-content: center; text-shadow: 0 1px 2px #000; }
+.ab .n { font-family: var(--mono); font-size: 9.5px; line-height: 1.05; text-align: center; text-transform: uppercase; letter-spacing: 0.3px; color: var(--text); }
+.ab .cd { position: absolute; inset: 0; color: var(--amber2); font-family: var(--mono); font-size: 18px; display: flex; align-items: center; justify-content: center; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
 .ab.aim { box-shadow: 0 0 0 3px var(--amber); }
-#squad { display: flex; flex-direction: column; gap: 3px; }
-.mate { display: flex; align-items: center; gap: 6px; background: var(--metal3); border: 1px solid var(--bevelLo); padding: 2px 6px; font-family: var(--mono); font-size: 11px; }
+#ordersBtn { flex: none; width: 84px; min-height: 80px; line-height: 1.2; }
+#squad { left: 10px; bottom: 10px; width: 200px; display: flex; flex-direction: column; gap: 3px; pointer-events: none; }
+.mate { display: flex; align-items: center; gap: 6px; background: rgba(28,32,36,0.92); border-top: 1px solid var(--bevelHi); border-bottom: 1px solid var(--bevelLo); padding: 3px 7px; font-family: var(--mono); font-size: 11px; }
 .mate .bar { flex: 1; height: 5px; background: #000; overflow: hidden; }
 .mate .bar i { display: block; height: 100%; background: var(--green); }
 .mate.dead { opacity: 0.55; }
 .mate .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ra-stripe { margin-top: auto; height: 10px; background: repeating-linear-gradient(135deg, var(--hazard) 0 12px, #111 12px 24px); border-top: 2px solid var(--bevelLo); }
+#mini { position: absolute; right: 10px; bottom: 10px; width: 224px; height: 140px; }
+.ra-radar { position: relative; background: #071A0B; border-top: 2px solid var(--bevelLo); border-left: 2px solid var(--bevelLo); border-right: 2px solid var(--bevelHi); border-bottom: 2px solid var(--bevelHi); box-shadow: 0 3px 10px rgba(0,0,0,0.6); overflow: hidden; }
+.ra-radar canvas { display: block; width: 100%; height: 100%; cursor: pointer; }
+.ra-radar .scan { position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(180deg, rgba(0,0,0,0) 0 2px, rgba(0,0,0,0.18) 2px 3px); }
+.ra-radar .bezel { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 18px rgba(0,0,0,0.7); }
 
-#dev { bottom: 10px; left: 10px; width: 250px; font-size: 14px; }
+#dev { top: 54px; left: 10px; width: 250px; font-size: 14px; }
 #dev summary { cursor: pointer; padding: 7px 12px; list-style: none; display: flex; justify-content: space-between; font-size: 12px; color: var(--amber2); }
 #dev summary::-webkit-details-marker { display: none; }
 #dev .body { padding: 2px 12px 12px; display: flex; flex-direction: column; gap: 7px; }
@@ -119,7 +116,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 #dev button:hover, .btn:hover { background: #40464D; }
 #dev select, .field select { background: var(--metal3); color: var(--text); border: 1px solid var(--bevelLo); padding: 4px 6px; font-family: var(--body); font-size: 13px; }
 #dev .stat { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-#help { bottom: 10px; left: 270px; right: calc(var(--side) + 10px); padding: 5px 10px; font-family: var(--mono); font-size: 12px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+#help { bottom: 116px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 20px); padding: 5px 10px; font-family: var(--mono); font-size: 12px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
 #help b { color: var(--amber2); }
 #help button { background: none; border: none; color: var(--amber2); font-weight: 600; cursor: pointer; font-size: 12px; font-family: var(--body); }
 
@@ -227,18 +224,14 @@ body.online .cheat { display: none !important; }
 @media (max-width: 760px) { .lobbyTeams { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .lobbyTeams { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
-  :root { --side: 0px; }
   #feed, #help, #squad { display: none; }
-  #side { top: auto; left: 0; right: 0; bottom: 0; width: auto; height: 150px; flex-direction: row; align-items: stretch; border-left: none; border-top: 2px solid var(--bevelHi); padding: 6px; gap: 6px; }
-  .ra-radar { width: 150px; aspect-ratio: auto; flex: none; }
-  .ra-tabs { flex-direction: column; width: 72px; flex: none; }
-  .ra-unit { flex-direction: column; width: 70px; flex: none; }
-  #portrait { width: 48px; height: 56px; } #portrait canvas { width: 44px; height: 52px; }
-  .ra-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 1; min-width: 0; }
-  .ab { height: 44px; }
-  .ra-stripe { display: none; }
-  #alert { right: 0; font-size: 15px; } #toast { right: 0; }
-  #dev { bottom: 160px; width: 200px; }
+  #bar { bottom: 100px; padding: 6px; gap: 6px; }
+  #portrait { width: 48px; } #portrait canvas { width: 44px; height: 52px; }
+  .ab { width: 46px; height: 46px; } .ab .n { font-size: 8px; }
+  #ordersBtn { width: 64px; min-height: 64px; font-size: 10px; }
+  #mini { width: 150px; height: 93px; }
+  #dev { width: 200px; }
+  #alert { font-size: 15px; }
   .pickGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .orders { grid-template-columns: 1fr; }
   h1 { font-size: 28px; }
@@ -260,22 +253,19 @@ body.online .cheat { display: none !important; }
   <div id="feed" class="hud"></div>
   <div id="toast" class="hud"></div>
 
-  <aside id="side" class="hud ra-side">
-    <div class="ra-radar"><canvas id="miniCv" width="440" height="272" aria-label="Situation map"></canvas><div class="scan"></div><div class="bezel"></div></div>
-    <div class="ra-tabs">
-      <button type="button" id="ordersBtn" class="ra-btn">FIELD ORDERS</button>
-    </div>
-    <div class="ra-unit">
-      <div id="portrait"><canvas id="portraitCv" width="128" height="152"></canvas><span id="lvl">3</span></div>
+  <div id="bar" class="hud plate">
+    <div id="portrait"><canvas id="portraitCv" width="128" height="152"></canvas><span id="lvl">3</span></div>
+    <div id="kit">
+      <div id="abil" class="ra-grid"></div>
       <div class="ra-meters">
         <div class="meter hp"><b id="shb"></b><i id="hpi"></i><span id="hpt">0 / 0</span></div>
         <div class="meter xp"><i id="xpi"></i></div>
       </div>
     </div>
-    <div id="abil" class="ra-grid"></div>
-    <div id="squad"></div>
-    <div class="ra-stripe" aria-hidden="true"></div>
-  </aside>
+    <button type="button" id="ordersBtn" class="ra-btn">FIELD ORDERS</button>
+  </div>
+  <div id="squad" class="hud"></div>
+  <div id="mini" class="hud ra-radar"><canvas id="miniCv" width="440" height="272" aria-label="Situation map"></canvas><div class="scan"></div><div class="bezel"></div></div>
 
   <details id="dev" class="hud plate">
     <summary class="stencil"><span>Range control</span><span id="fps" class="stat">60 fps</span></summary>
@@ -1812,7 +1802,7 @@ function resize() {
   DPR = Math.min(1.5, window.devicePixelRatio || 1);
   VW = cv.clientWidth; VH = cv.clientHeight;
   cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
-  var sideEl = document.getElementById('side'); SIDE_W = sideEl && window.innerWidth > 760 ? sideEl.offsetWidth : 0;
+  SIDE_W = 0;
   cam.zBase = clamp(Math.min((VW - SIDE_W) / 1500, VH / 900) * 1.1, 0.45, 1.25);
   if (!cam.zSet) cam.z = cam.zBase;
 }
@@ -2653,7 +2643,6 @@ cv.addEventListener('wheel', function (e) { e.preventDefault(); cam.zSet = true;
 mini.addEventListener('pointerdown', function (e) {
   var r = mini.getBoundingClientRect(); cam.lock = false;
   cam.x = (e.clientX - r.left) / r.width * MAP.W; cam.y = (e.clientY - r.top) / r.height * MAP.H;
-  if (G && G.player && !G.player.dead && e.shiftKey) { var wp = { x: cam.x, y: cam.y }; cmdMove(freePoint(wp, G.player.r), false); }
 });
 window.addEventListener('keydown', function (e) {
   if (!G || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;

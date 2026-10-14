@@ -1,6 +1,6 @@
 # Plastic Front
 
-An all-ARAM, toy-soldier MOBA that runs in the browser. Modern-kit plastic army men fight across a backyard sandbox: one diagonal lane between wooden planks, with sandcastle turrets, toy buckets, a dump truck and the lawn beyond. Combat feedback is modern-shooter style (hitmarkers, damage numbers, damage direction, kill confirms), and the HUD is a riveted command sidebar with a radar, in the manner of a classic 90s RTS. Play offline against bots, or online in real time against other people.
+An all-ARAM, toy-soldier MOBA that runs in the browser. Modern-kit plastic army men fight across a backyard sandbox: one diagonal lane between wooden planks, with sandcastle turrets, toy buckets, a dump truck and the lawn beyond. Combat feedback is modern-shooter style (hitmarkers, damage numbers, damage direction, kill confirms), and the HUD is riveted metal with LED readouts and a radar minimap, in the manner of a classic 90s RTS. Play offline against bots, or online in real time against other people.
 
 **Play:** https://mcgillpreston-glitch.github.io/PlasticBattle/
 

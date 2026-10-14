@@ -8,7 +8,7 @@ function resize() {
   DPR = Math.min(1.5, window.devicePixelRatio || 1);
   VW = cv.clientWidth; VH = cv.clientHeight;
   cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
-  var sideEl = document.getElementById('side'); SIDE_W = sideEl && window.innerWidth > 760 ? sideEl.offsetWidth : 0;
+  SIDE_W = 0;
   cam.zBase = clamp(Math.min((VW - SIDE_W) / 1500, VH / 900) * 1.1, 0.45, 1.25);
   if (!cam.zSet) cam.z = cam.zBase;
 }

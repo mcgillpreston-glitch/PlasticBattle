@@ -58,13 +58,13 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
 
   // Move both players toward mid by clicking the ground ahead of them
   const startA = a.me;
-  await A.mouse.move(900, 250); await A.mouse.click(900, 250);
+  await A.mouse.move(1000, 250); await A.mouse.click(1000, 250);
   await B.mouse.move(200, 600); await B.mouse.click(200, 600);
   await sleep(2500);
   a = await st(A); b = await st(B);
   const movedA = Math.hypot(a.me.x - startA.x, a.me.y - startA.y);
   check('click-to-move is applied by the server and shown on the client', movedA > 150, { movedA: Math.round(movedA) });
-  await A.mouse.move(900, 250); await A.keyboard.press('q'); await sleep(500);
+  await A.mouse.move(1000, 250); await A.keyboard.press('q'); await sleep(500);
   a = await st(A);
   check('ability cast goes through the server (Q on cooldown)', a.me.cdQ > 0, { cdQ: a.me.cdQ });
 

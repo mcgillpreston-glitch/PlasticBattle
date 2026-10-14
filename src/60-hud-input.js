@@ -178,7 +178,6 @@ cv.addEventListener('wheel', function (e) { e.preventDefault(); cam.zSet = true;
 mini.addEventListener('pointerdown', function (e) {
   var r = mini.getBoundingClientRect(); cam.lock = false;
   cam.x = (e.clientX - r.left) / r.width * MAP.W; cam.y = (e.clientY - r.top) / r.height * MAP.H;
-  if (G && G.player && !G.player.dead && e.shiftKey) { var wp = { x: cam.x, y: cam.y }; cmdMove(freePoint(wp, G.player.r), false); }
 });
 window.addEventListener('keydown', function (e) {
   if (!G || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
