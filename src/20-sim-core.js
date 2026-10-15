@@ -27,13 +27,13 @@ function range16() { var a = []; for (var i = 0; i < HEROES.length; i++) a.push(
 function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 function rebuildBlockers() {
   G.blockers = PROP_C.slice();
-  G.structs.forEach(function (s) { if (!s.dead) G.blockers.push({ x: s.x, y: s.y, r: s.r * 0.85, tag: s.kind }); });
+  G.structs.forEach(function (s) { if (!s.dead) G.blockers.push({ x: s.x, y: s.y, r: s.kind === 'hq' ? s.r * 0.85 : s.r * 0.7, tag: s.kind }); });
   NAV.ver++;
 }
 function addStruct(d) {
   var kind = d.kind;
-  var s = { id: uid++, isStruct: true, kind: kind, team: d.team, order: d.order, lane: d.lane, x: d.x, y: d.y, t: d.t,
-    maxHp: kind === 'hq' ? 4600 : 2700, range: kind === 'hq' ? 420 : 380,
+  var s = { id: uid++, isStruct: true, kind: kind, team: d.team, order: d.order, lane: d.lane, x: d.x, y: d.y, t: d.t, painted: d.painted || null,
+    maxHp: kind === 'hq' ? 4600 : 2300, range: kind === 'hq' ? 420 : 400,
     dmg: kind === 'hq' ? 190 : 155, acd: 1.05, aaT: 0, r: kind === 'hq' ? 120 : 48,
     dead: false, target: null, heat: 0, respawn: 0, flashT: 0, recoilT: 0 };
   s.hp = s.maxHp;
@@ -76,8 +76,7 @@ function spawnWave() {
       for (var i = 0; i < 2; i++) addMinion(team, 'melee', lane);
       for (var k = 0; k < 2; k++) addMinion(team, 'rifle', lane);
       if (G.wave % 3 === 0) addMinion(team, (G.wave / 3) % 3 === lane ? 'tank' : 'mortar', lane);
-      var enemyInner = G.structs.find(function (s) { return s.team !== team && s.kind === 'outpost' && s.order === 2 && s.lane === lane; });
-      if (enemyInner && enemyInner.dead) addMinion(team, 'jeep', lane);
+      if (laneOpen(1 - team, lane)) addMinion(team, 'jeep', lane);
     }
   });
 }
@@ -109,9 +108,11 @@ function visibleTo(u, team) {
   for (var i = 0; i < G.units.length; i++) { var o = G.units[i]; if (o.team === team && !o.dead && dist(o, u) < 240) return true; }
   return false;
 }
+/* a lane is open once every turret the team has on it is down */
+function laneOpen(team, lane) { for (var i = 0; i < G.structs.length; i++) { var o = G.structs[i]; if (o.team === team && o.kind === 'outpost' && o.lane === lane && !o.dead) return false; } return true; }
 function targetable(s) {
   if (s.dead) return false;
-  if (s.kind === 'hq') { for (var j = 0; j < G.structs.length; j++) { var h = G.structs[j]; if (h.team === s.team && h.kind === 'outpost' && h.order === 2 && h.dead) return true; } return false; }
+  if (s.kind === 'hq') { for (var l = 0; l < LANES.length; l++) if (laneOpen(s.team, l)) return true; return false; }
   for (var i = 0; i < G.structs.length; i++) { var o = G.structs[i]; if (o.team === s.team && o.lane === s.lane && !o.dead && o.order < s.order) return false; }
   return true;
 }
@@ -155,7 +156,7 @@ function kill(src, tgt) {
   if (tgt.dead) return;
   tgt.dead = true; tgt.hp = 0; tgt.deathT = 0;
   if (tgt.isStruct) {
-    var label = (tgt.team === 0 ? 'Green ' : 'Tan ') + (tgt.kind === 'hq' ? 'fort' : (['top', 'mid', 'bottom'][tgt.lane] || '') + ' ' + (tgt.order === 1 ? 'outer' : 'inner') + ' turret');
+    var label = (tgt.team === 0 ? 'Green ' : 'Tan ') + (tgt.kind === 'hq' ? 'fort' : (['top', 'mid', 'bottom'][tgt.lane] || '') + ' ' + (tgt.order === 1 ? 'outer' : tgt.order === 2 ? 'middle' : 'inner') + ' turret');
     feed(label + ' destroyed', tgt.team === 0 ? 'ft' : 'fg');
     emit('struct', tgt.id, tgt.team, tgt.kind, src && src.kind === 'hero' ? src.id : 0, tgt.lane, tgt.order);
     chips(tgt.x, tgt.y - 30, tgt.team, 30, 1.6);

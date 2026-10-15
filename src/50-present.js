@@ -34,7 +34,7 @@ function chipsFx(x, y, team, n, power) {
   for (var i = 0; i < n; i++) { var a = rnd(0, Math.PI * 2), s = rnd(80, 260) * power; addFx({ k: 'chip', x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 120, t: 0, dur: rnd(0.4, 0.9), c: TEAMC[team].c2, rot: rnd(0, 6) }); }
 }
 function showToast(txt, dur) { toastEl.textContent = txt; if (G) G.toastT = dur || 2; }
-function localShake(x, y, amt) { if (REDUCED || !G) return; var k = clamp(1 - vlen(x - cam.x, y - cam.y) / 1000, 0, 1); G.shake = Math.max(G.shake || 0, amt * k); }
+function localShake(x, y, amt) { if (REDUCED || opts.noShake || !G) return; var k = clamp(1 - vlen(x - cam.x, y - cam.y) / 1000, 0, 1); G.shake = Math.max(G.shake || 0, amt * k); }
 function unitById(id) {
   if (!id || !G) return null;
   if (NET.byId && NET.byId[id]) return NET.byId[id];
@@ -75,7 +75,7 @@ function present(e) {
         playSfx('kill');
       } else if (u && u.team === MYTEAM) showAlert('UNIT LOST', 'bad');
       break;
-    case 'struct': var sn = e[3] === 'hq' ? 'FORT' : (['TOP', 'MID', 'BOTTOM'][e[5]] || '') + ' LANE ' + (e[6] === 1 ? 'OUTER' : 'INNER') + ' TURRET'; if (e[2] === MYTEAM) showAlert(sn + ' LOST', 'bad'); else showAlert('ENEMY ' + sn + ' DESTROYED', 'good'); break;
+    case 'struct': var sn = e[3] === 'hq' ? 'FORT' : (['TOP', 'MID', 'BOTTOM'][e[5]] || '') + ' LANE ' + (e[6] === 1 ? 'OUTER' : e[6] === 2 ? 'MIDDLE' : 'INNER') + ' TURRET'; if (e[2] === MYTEAM) showAlert(sn + ' LOST', 'bad'); else showAlert('ENEMY ' + sn + ' DESTROYED', 'good'); break;
     case 'wave': if (e[1] % 3 === 0) showAlert('REINFORCEMENTS HAVE ARRIVED', 'info'); break;
     case 'sprinkler': showAlert('SPRINKLER ACTIVATED \u00b7 CLEAR THE CENTRE', 'bad'); break;
     case 'kia': if (isMe(e[1])) { showAlert('UNIT LOST', 'bad'); G.hurtT = 1.2; G.hitDirs = []; showDeath(e[2], unitById(e[4]), e[5]); } break;

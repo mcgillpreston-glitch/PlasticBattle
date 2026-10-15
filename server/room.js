@@ -106,7 +106,7 @@ class Room {
     this.ctx = ctx; this.state = 'game'; this.tickN = 0; this.nid = 0; this.overAt = 0;
     humans.forEach(p => { const r = roster.find(x => x.pid === p.cid); p.uid = r.uid; });
     this.roster = roster.map(r => ({ uid: r.uid, team: r.team, hero: r.hero, name: r.name || null }));
-    this.structs = ctx.G.structs.map(s => [s.id, s.team, s.kind, s.order, s.t]);
+    this.structs = ctx.G.structs.map(s => [s.id, s.team, s.kind, s.order, s.t]);  // ids only; clients build the same STRUCT_DEF
     humans.forEach(p => this.sendStart(p));
     this.stop();
     this.timer = setInterval(() => this.tick(), TICK_MS);
