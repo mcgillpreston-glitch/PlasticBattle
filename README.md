@@ -46,12 +46,12 @@ The GitHub Pages site is static, so online play needs the small Node server in `
 ## The game
 
 - **Mode:** ARAM only. Draw a random hero, with one reassignment. Offline you can pick any hero in test mode and play 1v1, 3v3 or 5v5 against bots.
-- **Map:** The Sandbox. Each side has two sand turrets, a supply bucket and a fort (Green's sandcastle, Tan's overturned bucket bunker), and they must fall in that order. Weeds growing through the sand hide units, first-aid tins heal, and sandcastle walls, a toy dump truck, a shovel and buckets give cover.
-- **Reserves:** a minion wave every 25 s, a tank every third wave, and a jeep once the enemy supply dump is down.
-- **Heroes:** 16, one for each classic army-men pose. Each has Q/W/E/R, plus D (Tag Round, then press again to close in) and F (Hit the Deck).
+- **Map:** The Sandbox, a painted 4K backyard sandbox (`assets/map.webp`, one world unit per pixel). Green holds the sand fort bottom-left, Tan the fort top-right, and **three lanes** run between them: top (around the left and along the back board), mid (straight through the centre bridge) and bottom (along the front and up the right side). Each lane has an outer and an inner sand turret per team; a lane's inner turret can only be hit once its outer turret is down, and a fort opens up once any of its three inner turrets has fallen. The hills, trenches, sandbag walls and barrels in the painting are not walkable; the rutted sand bands are, and weeds hide units.
+- **Reserves:** every 25 s each lane gets two riflemen and two bayonet chargers; every third wave one lane gets a toy tank and the other two get mortar crews; a jeep joins a lane once the enemy's inner turret there is down.
+- **Heroes:** 16, one for each classic army-men pose, drawn from illustrated figures (`assets/heroes/`); Tan's are the same figures recoloured to tan plastic. Each has Q/W/E/R, plus D (Tag Round, then press again to close in) and F (Hit the Deck).
 - **Going down:** when your soldier is eliminated the screen switches to a thermal feed (cold blue sandbox, white-hot soldiers, shots and blasts) and a KIA recap shows who hit you in the last 12 seconds, with what, for how much, who landed the killing blow, and the reinforcement countdown. The camera holds on the spot where you fell, you can drag to look around, and it swings back to base just before you respawn. Field Orders can still be issued while reinforcing.
 - **Field Orders:** augments at levels 3, 7, 11 and 15, in Squad, Platoon and Company tiers, issued at your CP or while reinforcing.
-- **Overtime:** the lawn sprinkler comes on after 18:00 and sweeps out from the centre; anything caught in the water takes damage.
+- **Overtime:** the lawn sprinkler comes on after 18:00 and sweeps every lane out from the centre; anything caught in the water takes damage.
 
 ## Controls
 
@@ -74,20 +74,22 @@ On touch screens: tap to move, drag to pan, tap an ability button and then the g
 ## Project layout
 
 ```
-index.html                 built, standalone game (GitHub Pages and the server both serve it)
+index.html                 built game page (GitHub Pages and the server both serve it, with assets/ beside it)
+assets/                    map.webp, heroes/*.png, minions/*.png
+art-src/                   the original illustrations and the map sections
 build.js                   concatenates src/ into index.html
 src/00-shell.html          page markup and styles
-src/10-data.js             shared: heroes, Field Orders, map geometry
-src/11-art.js              browser: plastic soldier sculpts, modern gear and weapon overlays, sprites
+src/10-data.js             shared: heroes, Field Orders, the three-lane map (lane polylines, walkable field, turret spots)
+src/11-art.js              browser: illustrated soldiers and vehicles (tan recolour), sprite cache, sculpt fallback
 src/12-audio.js            browser: synthesized sound
 src/20-sim-core.js         shared: state, damage and stats, collision, pathfinding, abilities, events
 src/30-sim-update.js       shared: update loop, attacks, bots and minions, Field Orders rules
-src/40-render.js           browser: terrain, units, effects, minimap
+src/40-render.js           browser: the painted map, units, effects, thermal feed, minimap
 src/50-present.js          browser: turns sim events into visuals, sound and EVA-style alerts
 src/60-hud-input.js        browser: HUD, scoreboard, Field Orders UI, input, game loop
 src/70-net.js              browser: online client, lobby, snapshot interpolation
 server/server.js           game server: rooms, lobby, matches, snapshots, commands
-server/sim.js              loads the shared sim into an isolated context per match
+server/sim.js              loads the shared sim into an isolated context per match (wrapped in a closure for speed)
 tests/playtest-harness.js  obstacle course + bot-match stuck detector (offline)
 tests/online-test.js       end-to-end online test with three live browser players
 tests/visual-check.js      combat and scoreboard screenshots

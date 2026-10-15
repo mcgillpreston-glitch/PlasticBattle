@@ -75,7 +75,7 @@ function present(e) {
         playSfx('kill');
       } else if (u && u.team === MYTEAM) showAlert('UNIT LOST', 'bad');
       break;
-    case 'struct': if (e[2] === MYTEAM) showAlert((e[3] === 'hq' ? 'FORT' : e[3] === 'depot' ? 'SUPPLY BUCKET' : 'SAND TURRET') + ' LOST', 'bad'); else showAlert('ENEMY ' + (e[3] === 'hq' ? 'FORT' : e[3] === 'depot' ? 'SUPPLY BUCKET' : 'SAND TURRET') + ' DESTROYED', 'good'); break;
+    case 'struct': var sn = e[3] === 'hq' ? 'FORT' : (['TOP', 'MID', 'BOTTOM'][e[5]] || '') + ' LANE ' + (e[6] === 1 ? 'OUTER' : 'INNER') + ' TURRET'; if (e[2] === MYTEAM) showAlert(sn + ' LOST', 'bad'); else showAlert('ENEMY ' + sn + ' DESTROYED', 'good'); break;
     case 'wave': if (e[1] % 3 === 0) showAlert('REINFORCEMENTS HAVE ARRIVED', 'info'); break;
     case 'sprinkler': showAlert('SPRINKLER ACTIVATED \u00b7 CLEAR THE CENTRE', 'bad'); break;
     case 'kia': if (isMe(e[1])) { showAlert('UNIT LOST', 'bad'); G.hurtT = 1.2; G.hitDirs = []; showDeath(e[2], unitById(e[4]), e[5]); } break;
@@ -147,7 +147,7 @@ function weaponLabel(w, kc, src, label) {
   if (w !== 'aa') return w;
   if (kc === 'h') return WPN_NAME[(src && WPN[src.pose]) || 'carbine'] || 'Rifle';
   if (kc === 's') return 'Turret fire';
-  if (kc === 'm') return label === 'Toy tank' ? 'Cannon' : label === 'Jeep' ? 'Mounted MG' : 'Rifle fire';
+  if (kc === 'm') return label === 'Toy tank' ? 'Cannon' : label === 'Jeep' ? 'Mounted MG' : label === 'Mortar crew' ? 'Mortar shell' : 'Rifle fire';
   return 'Hazard';
 }
 function showDeath(secs, killer, recap) {
@@ -198,7 +198,7 @@ function updateDeath(dt) {
 /* Red Alert style EVA alerts: short, queued, flashing */
 var ALERT = { q: [], t: 0, el: document.getElementById('alert'), lastStruct: {} };
 function showAlert(txt, cls) { if (ALERT.q.length > 3) ALERT.q.shift(); ALERT.q.push({ txt: txt, cls: cls || 'info' }); }
-function alertStruct(s) { var now = G.time; if (ALERT.lastStruct[s.id] != null && now - ALERT.lastStruct[s.id] < 12) return; ALERT.lastStruct[s.id] = now; showAlert((s.kind === 'hq' ? 'FORT' : s.kind === 'depot' ? 'SUPPLY BUCKET' : 'SAND TURRET') + ' UNDER ATTACK', 'bad'); }
+function alertStruct(s) { var now = G.time; if (ALERT.lastStruct[s.id] != null && now - ALERT.lastStruct[s.id] < 12) return; ALERT.lastStruct[s.id] = now; showAlert((s.kind === 'hq' ? 'FORT' : (['TOP', 'MID', 'BOTTOM'][s.lane] || '') + ' LANE TURRET') + ' UNDER ATTACK', 'bad'); }
 function updateAlerts(dt) {
   if (ALERT.t > 0) { ALERT.t -= dt; if (ALERT.t <= 0) { ALERT.el.hidden = true; ALERT.el.className = 'hud'; } return; }
   if (!ALERT.q.length) return;

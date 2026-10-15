@@ -120,42 +120,134 @@ function dist(a, b) { return vlen(a.x - b.x, a.y - b.y); }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 function rnd(a, b) { return a + Math.random() * (b - a); }
 function seeded(s) { var x = s || 1; return function () { x = (x * 1664525 + 1013904223) % 4294967296; return x / 4294967296; }; }
-var MAP = { A: { x: 360, y: 1560 }, B: { x: 2900, y: 360 }, half: 200, W: 3260, H: 1920 };
-var LLEN = dist(MAP.A, MAP.B);
-var LD = { x: (MAP.B.x - MAP.A.x) / LLEN, y: (MAP.B.y - MAP.A.y) / LLEN };
-var LP = { x: -LD.y, y: LD.x };
-var LANG = Math.atan2(LD.y, LD.x);
-var LCX = (MAP.A.x + MAP.B.x) / 2, LCY = (MAP.A.y + MAP.B.y) / 2;
-function lanePt(t, off) { off = off || 0; return { x: MAP.A.x + LD.x * LLEN * t + LP.x * off, y: MAP.A.y + LD.y * LLEN * t + LP.y * off }; }
-function laneProj(p) { var dx = p.x - MAP.A.x, dy = p.y - MAP.A.y; return { t: (dx * LD.x + dy * LD.y) / LLEN, off: dx * LP.x + dy * LP.y }; }
-function clampLane(p) { var q = laneProj(p); return lanePt(clamp(q.t, -0.07, 1.07), clamp(q.off, -MAP.half + 14, MAP.half - 14)); }
-function fountain(team) { return team === 0 ? lanePt(-0.035, 0) : lanePt(1.035, 0); }
-function progress(u) { var t = laneProj(u).t; return u.team === 0 ? t : 1 - t; }
 
-/* Roadside props sit flush against the hedge (off + r > 172) so no unit can slip into a sliver behind them. */
-var PROPS = [
-  { kind: 'stump', t: 0.31, off: 150, r: 30 },
-  { kind: 'stump', t: 0.69, off: -150, r: 30 },
-  { kind: 'wall', t: 0.40, off: -150, r: 30, len: 170 },
-  { kind: 'wall', t: 0.60, off: 150, r: 30, len: 170 },
-  { kind: 'jeep', t: 0.50, off: 140, r: 36, len: 124 },
-  { kind: 'cart', t: 0.50, off: -142, r: 32, len: 108 }
+/* The Sandbox: the painted 4K map is the world, one world unit per map pixel. Green holds the sand fort bottom-left, Tan the fort top-right.
+   Three lanes (top, mid, bottom) are polylines with a half-width per point; the walkable field is the union of those capsules plus the two fort yards.
+   Everything else in the painting (hills, trenches, sandbag walls, barrels) is simply not walkable. */
+var MAP = { W: 3840, H: 2160 };
+var FOUNT = [{ x: 620, y: 1620 }, { x: 3350, y: 330 }];
+var LANE_DEF = [
+  { name: 'top', pts: [[620, 1620, 110], [660, 1400, 110], [600, 1200, 105], [520, 1040, 100], [500, 880, 100], [580, 700, 100], [780, 520, 100], [1040, 540, 100], [1240, 420, 100], [1400, 320, 100], [1600, 300, 100], [1800, 240, 100], [2000, 250, 90], [2200, 340, 80], [2420, 380, 90], [2600, 310, 100], [2800, 260, 100], [2960, 260, 100], [3150, 300, 110], [3350, 330, 110]] },
+  { name: 'mid', pts: [[620, 1620, 120], [830, 1500, 120], [1040, 1470, 120], [1250, 1330, 120], [1500, 1200, 120], [1750, 1080, 120], [2000, 1000, 120], [2110, 960, 120], [2300, 880, 120], [2500, 790, 120], [2700, 700, 120], [2900, 610, 120], [3100, 540, 120], [3220, 480, 120], [3300, 400, 120], [3350, 330, 120]] },
+  { name: 'bot', pts: [[620, 1620, 110], [830, 1500, 110], [1120, 1490, 105], [1330, 1560, 95], [1520, 1610, 90], [1700, 1630, 85], [1900, 1650, 85], [2100, 1760, 95], [2300, 1800, 100], [2500, 1740, 100], [2650, 1620, 100], [2800, 1510, 100], [2900, 1480, 100], [3100, 1490, 100], [3240, 1320, 100], [3320, 1160, 100], [3350, 1000, 100], [3400, 850, 100], [3380, 700, 100], [3300, 580, 100], [3220, 480, 110], [3300, 400, 110], [3350, 330, 110]] }
 ];
-var PROP_C = [];
-PROPS.forEach(function (p) {
-  var q = lanePt(p.t, p.off); p.x = q.x; p.y = q.y;
-  if (p.len) { var e = p.len / 2 - p.r; PROP_C.push({ x: p.x, y: p.y, r: p.r, h: e, ax: p.x - LD.x * e, ay: p.y - LD.y * e, bx: p.x + LD.x * e, by: p.y + LD.y * e, tag: p.kind }); }
-  else PROP_C.push({ x: p.x, y: p.y, r: p.r, tag: p.kind });
+/* extra walkable pieces: the fort yards, so heroes can move about their base */
+var FIELD_EXTRA = [
+  { ax: 380, ay: 1360, bx: 760, by: 1720, r: 250 }, { ax: 3050, ay: 250, bx: 3600, by: 440, r: 240 },
+  { ax: 900, ay: 1480, bx: 1300, by: 1450, r: 170 }, { ax: 3060, ay: 440, bx: 3230, by: 500, r: 120 }
+];
+var LANES = LANE_DEF.map(function (d, li) {
+  var pts = d.pts.map(function (p) { return { x: p[0], y: p[1], r: p[2] }; }), cum = [0];
+  for (var i = 1; i < pts.length; i++) cum.push(cum[i - 1] + vlen(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  return { i: li, name: d.name, pts: pts, cum: cum, len: cum[cum.length - 1] };
 });
-var BRUSH = [ { t: 0.25, off: 150 }, { t: 0.75, off: -150 } ];
-BRUSH.forEach(function (b) { var q = lanePt(b.t, b.off); b.x = q.x; b.y = q.y; b.rx = 125; b.ry = 62; });
-var BR_C = Math.cos(-LANG), BR_S = Math.sin(-LANG);
+var FIELD_CAPS = [];
+LANES.forEach(function (L) { for (var i = 0; i < L.pts.length - 1; i++) { var a = L.pts[i], b = L.pts[i + 1]; FIELD_CAPS.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, r: Math.min(a.r, b.r), lane: L.i }); } });
+FIELD_EXTRA.forEach(function (c) { FIELD_CAPS.push({ ax: c.ax, ay: c.ay, bx: c.bx, by: c.by, r: c.r, lane: -1 }); });
+FIELD_CAPS.forEach(function (c) { c.minx = Math.min(c.ax, c.bx) - c.r; c.maxx = Math.max(c.ax, c.bx) + c.r; c.miny = Math.min(c.ay, c.by) - c.r; c.maxy = Math.max(c.ay, c.by) + c.r; });
+/* bucket grid so a field query only looks at the few capsules nearby (a point more than FB_REACH outside every capsule reads as far outside) */
+var FB_SIZE = 256, FB_REACH = 200, FB_NX = Math.ceil(MAP.W / FB_SIZE) + 1, FB_NY = Math.ceil(MAP.H / FB_SIZE) + 1, FB = [];
+for (var fbi = 0; fbi < FB_NX * FB_NY; fbi++) FB.push([]);
+FIELD_CAPS.forEach(function (c) {
+  var x0 = Math.max(0, Math.floor((c.minx - FB_REACH) / FB_SIZE)), x1 = Math.min(FB_NX - 1, Math.floor((c.maxx + FB_REACH) / FB_SIZE));
+  var y0 = Math.max(0, Math.floor((c.miny - FB_REACH) / FB_SIZE)), y1 = Math.min(FB_NY - 1, Math.floor((c.maxy + FB_REACH) / FB_SIZE));
+  for (var i = x0; i <= x1; i++) for (var j = y0; j <= y1; j++) FB[i * FB_NY + j].push(c);
+});
+function fieldBucket(x, y) {
+  var i = Math.floor(x / FB_SIZE), j = Math.floor(y / FB_SIZE);
+  if (i < 0 || j < 0 || i >= FB_NX || j >= FB_NY) return null;
+  return FB[i * FB_NY + j];
+}
+
+function capDist(c, x, y) {
+  var dx = c.bx - c.ax, dy = c.by - c.ay, L2 = dx * dx + dy * dy, t = L2 ? ((x - c.ax) * dx + (y - c.ay) * dy) / L2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return vlen(x - c.ax - dx * t, y - c.ay - dy * t);
+}
+/* signed distance to the edge of the walkable field: positive inside */
+function fieldSD(x, y) {
+  var best = -1e9, list = fieldBucket(x, y);
+  if (!list) return best;
+  for (var i = 0; i < list.length; i++) {
+    var c = list[i];
+    if (x < c.minx - 200 || x > c.maxx + 200 || y < c.miny - 200 || y > c.maxy + 200) continue;
+    var v = c.r - capDist(c, x, y); if (v > best) best = v;
+  }
+  return best;
+}
+/* the capsule that holds (or is nearest to) a point, with the closest point on its spine */
+function fieldNearest(x, y) {
+  var best = null, bv = -1e9, list = fieldBucket(x, y);
+  if (!list || !list.length) list = FIELD_CAPS;
+  for (var i = 0; i < list.length; i++) {
+    var c = list[i], v = c.r - capDist(c, x, y);
+    if (v > bv) { bv = v; best = c; }
+  }
+  var dx = best.bx - best.ax, dy = best.by - best.ay, L2 = dx * dx + dy * dy, t = L2 ? ((x - best.ax) * dx + (y - best.ay) * dy) / L2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return { cap: best, sd: bv, cx: best.ax + dx * t, cy: best.ay + dy * t };
+}
+/* pull a point inside the field, keeping `margin` from the edge */
+function clampField(p, margin) {
+  margin = margin == null ? 14 : margin;
+  if (fieldSD(p.x, p.y) >= margin) return { x: p.x, y: p.y };
+  var n = fieldNearest(p.x, p.y), dx = p.x - n.cx, dy = p.y - n.cy, d = vlen(dx, dy);
+  if (d < 0.01) { dx = 0; dy = 1; d = 1; }
+  var k = Math.max(0, n.cap.r - margin) / d;
+  return { x: n.cx + dx * k, y: n.cy + dy * k };
+}
+function clampLane(p) { return clampField(p, 14); }
+
+/* lane parametrisation: t runs 0 (Green fort) .. 1 (Tan fort) along the lane's arc length, off is sideways */
+function lanePt(t, off, li) {
+  var L = LANES[li == null ? 1 : li], s = clamp(t, 0, 1) * L.len, pts = L.pts, i = 1;
+  while (i < pts.length - 1 && L.cum[i] < s) i++;
+  var a = pts[i - 1], b = pts[i], segL = L.cum[i] - L.cum[i - 1] || 1, f = (s - L.cum[i - 1]) / segL;
+  var dx = (b.x - a.x) / segL, dy = (b.y - a.y) / segL;
+  off = off || 0;
+  return { x: a.x + (b.x - a.x) * f - dy * off, y: a.y + (b.y - a.y) * f + dx * off };
+}
+function laneProj(p, li) {
+  var L = LANES[li == null ? 1 : li], pts = L.pts, bd = 1e18, bt = 0, boff = 0;
+  for (var i = 0; i < pts.length - 1; i++) {
+    var a = pts[i], b = pts[i + 1], dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy, t = L2 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    var qx = p.x - a.x - dx * t, qy = p.y - a.y - dy * t, d2 = qx * qx + qy * qy;
+    if (d2 < bd) { bd = d2; var segL = Math.sqrt(L2) || 1; bt = (L.cum[i] + t * segL) / L.len; boff = (-dy * qx + dx * qy) / segL; }
+  }
+  return { t: bt, off: boff, d: Math.sqrt(bd) };
+}
+function nearestLane(p) { var best = 1, bd = 1e18; for (var i = 0; i < LANES.length; i++) { var d = laneProj(p, i).d; if (d < bd) { bd = d; best = i; } } return best; }
+function laneOf(u) { return u.lane != null ? u.lane : nearestLane(u); }
+function fountain(team) { return FOUNT[team]; }
+function progress(u) { var t = laneProj(u, laneOf(u)).t; return u.team === 0 ? t : 1 - t; }
+
+/* Structures: each lane has an outer and an inner sand turret per team, set just off the lane edge; each fort's keep is the HQ. */
+var STRUCT_DEF = [];
+LANES.forEach(function (L) {
+  [[0, 0.37, 1], [0, 0.2, 2], [1, 0.63, 1], [1, 0.8, 2]].forEach(function (d) {
+    var side = L.name === 'top' ? 1 : L.name === 'bot' ? -1 : (d[2] === 1 ? 1 : -1);
+    var q = lanePt(d[1], 0, L.i), q2 = lanePt(d[1] + 0.002, 0, L.i), dx = q2.x - q.x, dy = q2.y - q.y, len = vlen(dx, dy) || 1;
+    var r = 0; L.pts.forEach(function (p, i) { if (L.cum[i] <= d[1] * L.len) r = p.r; });
+    STRUCT_DEF.push({ team: d[0], lane: L.i, kind: 'outpost', order: d[2], x: Math.round(q.x - dy / len * side * (r + 34)), y: Math.round(q.y + dx / len * side * (r + 34)), t: d[1] });
+  });
+});
+STRUCT_DEF.push({ team: 0, lane: -1, kind: 'hq', order: 4, x: 500, y: 1440, t: 0 });
+STRUCT_DEF.push({ team: 1, lane: -1, kind: 'hq', order: 4, x: 3450, y: 200, t: 1 });
+/* fort towers that are not structures but still block movement */
+var PROPS = [];
+var PROP_C = [
+  { x: 330, y: 1270, r: 60, tag: 'tower' }, { x: 930, y: 1650, r: 60, tag: 'tower' }, { x: 720, y: 1910, r: 60, tag: 'tower' },
+  { x: 2960, y: 250, r: 60, tag: 'tower' }, { x: 3600, y: 550, r: 60, tag: 'tower' }, { x: 3130, y: 290, r: 45, tag: 'tower' }
+];
+/* weeds: hiding spots on the painted grass tufts */
+var BRUSH = [ { x: 1570, y: 960, rx: 130, ry: 70 }, { x: 2320, y: 1480, rx: 130, ry: 70 }, { x: 2660, y: 1240, rx: 120, ry: 65 }, { x: 1280, y: 430, rx: 110, ry: 60 } ];
 function inBrush(p) {
   for (var i = 0; i < BRUSH.length; i++) {
     var b = BRUSH[i], dx = p.x - b.x, dy = p.y - b.y;
-    if (dx > b.rx || dx < -b.rx || dy > b.rx || dy < -b.rx) continue;
-    var x = dx * BR_C - dy * BR_S, y = dx * BR_S + dy * BR_C;
-    if ((x * x) / (b.rx * b.rx) + (y * y) / (b.ry * b.ry) < 1) return i;
+    if (dx > b.rx || dx < -b.rx || dy > b.ry || dy < -b.ry) continue;
+    if ((dx * dx) / (b.rx * b.rx) + (dy * dy) / (b.ry * b.ry) < 1) return i;
   }
   return -1;
 }
+var CRATE_DEF = [[2110, 960], [1950, 190], [2300, 1800]];

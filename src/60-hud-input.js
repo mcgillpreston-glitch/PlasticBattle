@@ -78,10 +78,9 @@ function renderSB() {
     var hs = heroes.filter(function (h) { return h.team === team; });
     var sum = function (k) { return hs.reduce(function (a, h) { return a + h.st[k]; }, 0); };
     var mine = G.structs.filter(function (s) { return s.team === team; }), theirs = G.structs.filter(function (s) { return s.team !== team; });
-    var dep = mine.find(function (s) { return s.kind === 'depot'; });
     return { team: team, hs: hs, k: G.kills[team], d: sum('d'), a: sum('a'), cs: sum('cs'), dmgH: sum('dmgH'), dmgS: sum('dmgS'), heal: sum('heal'),
       held: mine.filter(function (s) { return !s.dead; }).length, taken: theirs.filter(function (s) { return s.dead; }).length,
-      lvl: hs.length ? hs.reduce(function (a, h) { return a + h.lvl; }, 0) / hs.length : 0, dep: dep, orders: hs.reduce(function (a, h) { return a + h.augs.length; }, 0) };
+      lvl: hs.length ? hs.reduce(function (a, h) { return a + h.lvl; }, 0) / hs.length : 0, orders: hs.reduce(function (a, h) { return a + h.augs.length; }, 0) };
   });
   var tot = teams[0].dmgH + teams[1].dmgH || 1;
   document.getElementById('sbTug').innerHTML = '<i style="width:' + (100 * teams[0].dmgH / tot).toFixed(1) + '%;background:var(--green)"></i><i style="flex:1;background:var(--tan)"></i>';
@@ -89,10 +88,9 @@ function renderSB() {
   var html = '';
   teams.forEach(function (T) {
     var cls = T.team === 0 ? 'g' : 't', name = T.team === 0 ? 'Green Army' : 'Tan Army';
-    var depTxt = !T.dep ? '-' : !T.dep.dead ? 'up' : 'rebuild ' + fmtTime(Math.max(0, T.dep.respawn));
     html += '<section class="sbteam ' + cls + '"><header><h3>' + name + '</h3><div class="sbstats">' +
       '<span>Kills <b>' + T.k + '</b></span><span>Deaths <b>' + T.d + '</b></span><span>Assists <b>' + T.a + '</b></span>' +
-      '<span>Positions held <b>' + T.held + '/4</b></span><span>Positions taken <b>' + T.taken + '</b></span><span>Supply dump <b>' + depTxt + '</b></span>' +
+      '<span>Positions held <b>' + T.held + '/7</b></span><span>Positions taken <b>' + T.taken + '</b></span>' +
       '<span>Hero dmg <b>' + kfmt(T.dmgH) + '</b></span><span>Structure dmg <b>' + kfmt(T.dmgS) + '</b></span><span>CS <b>' + T.cs + '</b></span><span>Avg level <b>' + T.lvl.toFixed(1) + '</b></span><span>Orders <b>' + T.orders + '</b></span>' +
       '</div></header><div class="sbwrap"><table class="sbt"><thead><tr><th scope="col">Soldier</th><th scope="col">Lvl</th><th scope="col">K / D / A</th><th scope="col">CS</th><th scope="col">Hero dmg</th><th scope="col">Struct dmg</th><th scope="col">Dmg taken</th><th scope="col">Heal/Shield</th><th scope="col">Best streak</th><th scope="col">Orders</th><th scope="col">Status</th></tr></thead><tbody>';
     T.hs.forEach(function (h) {
@@ -314,13 +312,26 @@ function frame(now) {
   draw();
   requestAnimationFrame(frame);
 }
+/* Art lives next to the page (assets/): the painted map and the soldier illustrations. The page runs even if a file fails, with flat sand and sculpted figures. */
+var ASSET_BASE = (function () { var sc = document.currentScript && document.currentScript.src; return sc ? sc.replace(/[^\/]*$/, '') : ''; })();
+function loadAssets(done) {
+  var pending = 0, finish = function () { if (--pending === 0) done(); };
+  function img(url, cb) { pending++; var im = new Image(); im.onload = function () { cb(im); finish(); }; im.onerror = function () { cb(null); finish(); }; im.src = ASSET_BASE + url; }
+  img('assets/map.webp', function (im) { ASSETS.map = im; });
+  loadHeroArt(img);
+  if (!pending) done();
+}
 function start() {
-  resize(); checkBlend(); makeGrain(); terrain = buildTerrain();
-  newGame(3, 3);
-  showDraft();
-  if (NETC.inviteCode) setTab(true);
-  requestAnimationFrame(frame);
+  var dep = document.getElementById('deploy'); dep.disabled = true; dep.textContent = 'Loading the sandbox\u2026';
+  loadAssets(function () {
+    dep.disabled = false; dep.textContent = 'Deploy';
+    resize(); checkBlend(); makeGrain(); terrain = buildTerrain();
+    newGame(3, 3);
+    showDraft();
+    if (NETC.inviteCode) setTab(true);
+    requestAnimationFrame(frame);
+  });
 }
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(start, start); else start();
 
-window.__PF = { get G() { return G; }, get NET() { return NET; }, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, LLEN: LLEN, MAP: MAP, LANG: LANG, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG };
+window.__PF = { get G() { return G; }, get NET() { return NET; }, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };

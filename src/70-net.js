@@ -2,7 +2,7 @@
 var PF_DEFAULT_SERVER = 'wss://plastic-front.onrender.com/ws';   // the deployed game server (see README); players can override it under Server
 var INTERP = 0.1;                // seconds of interpolation delay behind the newest snapshot
 var NETC = { ws: null, cid: null, room: null, snaps: [], cur: null, off: null, myUid: 0, aimT: 0, pingT: 0, ping: 0, inMatch: false, offerKey: '' };
-var KIND = ['hero', 'melee', 'rifle', 'tank', 'jeep'];
+var KIND = ['hero', 'melee', 'rifle', 'tank', 'jeep', 'mortar'];
 var PKIND = ['shot', 'bullet', 'rocket', 'jack'];
 var SLOTS = ['Q', 'W', 'E', 'R', 'D', 'F'];
 
@@ -69,7 +69,8 @@ function netStart(m) {
   G = { time: 0, units: [], structs: [], proj: [], lobs: [], mines: [], fx: [], texts: [], kills: [0, 0], nextWave: 3, wave: 0, crates: [], over: false, winner: -1,
     barrage: null, player: null, feed: [], toastT: 0, hurtT: 0, blockers: [], moveMark: null, rounds: [], shake: 0, ev: [] };
   NET.byId = {};
-  m.structs.forEach(function (a) { addStruct(a[1], a[4], a[2], a[3]); var s = G.structs[G.structs.length - 1]; s.id = a[0]; NET.byId[s.id] = s; });
+  makeStructs();
+  m.structs.forEach(function (a, i) { var s = G.structs[i]; if (!s) return; s.id = a[0]; NET.byId[s.id] = s; });
   makeCrates();
   m.roster.forEach(function (r) { var u = mirrorHero(r, r.uid === m.you); G.units.push(u); NET.byId[u.id] = u; });
   G.player = NET.byId[m.you];
@@ -89,9 +90,9 @@ function mirrorHero(r, mine) {
     st: { k: 0, d: 0, a: 0, cs: 0, dmgH: 0, dmgS: 0, taken: 0, heal: 0, best: 0 }, _hidden: r.team !== MYTEAM };
 }
 function mirrorMinion(a) {
-  var type = KIND[a[1]], small = type === 'melee' || type === 'rifle';
+  var type = KIND[a[1]], small = type === 'melee' || type === 'rifle' || type === 'mortar';
   return { id: a[0], kind: 'minion', type: type, team: a[2], x: a[3], y: a[4], hp: a[5], maxHp: a[6], facing: a[7], r: type === 'tank' ? 28 : type === 'jeep' ? 24 : 15,
-    h: small ? 50 : 0, pose: type === 'melee' ? 'charger' : type === 'rifle' ? 'pointman' : null, buffs: [], shield: 0, dead: false, deathT: 0 };
+    h: small ? 64 : 0, pose: small ? 'm_' + type : null, buffs: [], shield: 0, dead: false, deathT: 0 };
 }
 function netSnap(S) {
   var now = performance.now() / 1000, est = S.tm - now;

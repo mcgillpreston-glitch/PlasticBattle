@@ -13,7 +13,7 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
   const srv = global.__srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'server.js')], { env: Object.assign({}, process.env, { PORT: String(PORT), PF_DEBUG: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
   let srvLog = ''; srv.stdout.on('data', d => srvLog += d); srv.stderr.on('data', d => srvLog += d);
   await sleep(800);
-  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox'] } : {});
+  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox', '--allow-file-access-from-files'] } : {});
   const errors = []; global.__errors = errors; global.__srvLog = () => srvLog;
   async function client(name) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
