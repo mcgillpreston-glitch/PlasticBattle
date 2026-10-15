@@ -22,7 +22,8 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
     page.on('console', m => { if (m.type() === 'error' && !/fonts|ERR_TUNNEL|ERR_NAME/.test(m.text())) errors.push(name + ' console: ' + m.text()); });
     page.bytes = 0; page.frames = 0;
     page.on('websocket', ws => ws.on('framereceived', f => { page.bytes += (f.payload || '').length; page.frames++; }));
-    await page.goto(URL); await page.waitForTimeout(700);
+    await page.goto(URL);
+    await page.waitForFunction(() => !document.getElementById('draft').hidden && !document.getElementById('deploy').disabled, null, { timeout: 60000 });
     await page.click('#tabOnline');
     await page.fill('#oName', name);
     return page;
@@ -135,24 +136,27 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
   check('rematch starts for everyone in the room', true);
   const status = await (await fetch(URL + 'status')).json();
   check('server status endpoint', status.rooms === 1 && status.players === 2, status);
+  const bad = await fetch(URL + 'api/room/ZZZZ');
+  check('joining an unknown code is refused cleanly', bad.status === 404 && /No room/.test((await bad.json()).error));
   check('no page errors', errors.length === 0, errors.slice(0, 5));
   check('no server errors', !/error/i.test(srvLog), srvLog.slice(-1600));
 
 
   // Fog of war: the server must not send an enemy hiding in a thicket unless one of your units is close
   {
-    const S = require(path.join(__dirname, '..', 'server', 'server.js'));
-    const room = S.createRoom(1); const fake = cid => ({ cid, ws: { readyState: 0 }, team: 0, hero: 0, name: cid });
+    const { Room } = require(path.join(__dirname, '..', 'server', 'room.js'));
+    const { createSim } = require(path.join(__dirname, '..', 'server', 'sim.js'));
+    const room = new Room('TEST', 1, { createSim }); const fake = cid => ({ cid, send() {}, team: 0, hero: 0, name: cid, rerolls: 1, uid: 0 });
     const p0 = fake('t0'), p1 = fake('t1'); p1.team = 1; p1.hero = 1; room.players.set('t0', p0); room.players.set('t1', p1);
-    S.startMatch(room); S.stopRoom(room);
+    room.start(); room.stop();
     const C = room.ctx, G = C.G, me = G.units.find(u => u.team === 0 && u.kind === 'hero'), foe = G.units.find(u => u.team === 1 && u.kind === 'hero');
     const bush = C.BRUSH[0]; foe.x = bush.x; foe.y = bush.y; me.x = bush.x - 600; me.y = bush.y + 200;
-    const hidden = !S.teamSnap(room, 0, []).u.some(a => a[0] === foe.id);
+    const hidden = !room.teamSnap(0, []).u.some(a => a[0] === foe.id);
     me.x = bush.x - 120; me.y = bush.y;
-    const spotted = S.teamSnap(room, 0, []).u.some(a => a[0] === foe.id);
-    const ownTeamSeesIt = S.teamSnap(room, 1, []).u.some(a => a[0] === foe.id);
+    const spotted = room.teamSnap(0, []).u.some(a => a[0] === foe.id);
+    const ownTeamSeesIt = room.teamSnap(1, []).u.some(a => a[0] === foe.id);
     check('fog: enemy in a thicket is not sent until you get close', hidden && spotted && ownTeamSeesIt, { hidden, spotted, ownTeamSeesIt });
-    S.rooms.delete(room.code);
+    room.destroy();
   }
   await browser.close(); srv.kill();
   const failed = results.filter(r => !r.ok).length;
