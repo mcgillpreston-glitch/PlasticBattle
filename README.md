@@ -48,7 +48,7 @@ The GitHub Pages site is static, so online play needs the small Node server in `
 - **Mode:** ARAM only. Draw a random hero, with one reassignment. Offline you can pick any hero in test mode and play 1v1, 3v3 or 5v5 against bots.
 - **Map:** The Sandbox, a painted 4K backyard sandbox (`assets/map.webp`, one world unit per pixel). Green holds the sand fort bottom-left, Tan the fort top-right, and **three lanes** run between them: top (around the left and along the back board), mid (straight through the centre bridge) and bottom (along the front and up the right side). Each lane has an outer and an inner sand turret per team; a lane's inner turret can only be hit once its outer turret is down, and a fort opens up once any of its three inner turrets has fallen. The hills, trenches, sandbag walls and barrels in the painting are not walkable; the rutted sand bands are, and weeds hide units.
 - **Reserves:** every 25 s each lane gets two riflemen and two bayonet chargers; every third wave one lane gets a toy tank and the other two get mortar crews; a jeep joins a lane once the enemy's inner turret there is down.
-- **Heroes:** 16, one for each classic army-men pose, drawn from illustrated figures (`assets/heroes/`); Tan's are the same figures recoloured to tan plastic. Each has Q/W/E/R, plus D (Tag Round, then press again to close in) and F (Hit the Deck).
+- **Heroes:** 16, one for each classic army-men pose, drawn from illustrated figures (`assets/heroes/` for Green, `assets/heroes/tan/` for Tan; a missing tan file falls back to a recolour of the green one). Each has Q/W/E/R, plus D (Tag Round, then press again to close in) and F (Hit the Deck).
 - **Going down:** when your soldier is eliminated the screen switches to a thermal feed (cold blue sandbox, white-hot soldiers, shots and blasts) and a KIA recap shows who hit you in the last 12 seconds, with what, for how much, who landed the killing blow, and the reinforcement countdown. The camera holds on the spot where you fell, you can drag to look around, and it swings back to base just before you respawn. Field Orders can still be issued while reinforcing.
 - **Field Orders:** augments at levels 3, 7, 11 and 15, in Squad, Platoon and Company tiers, issued at your CP or while reinforcing.
 - **Overtime:** the lawn sprinkler comes on after 18:00 and sweeps every lane out from the centre; anything caught in the water takes damage.
@@ -75,7 +75,7 @@ On touch screens: tap to move, drag to pan, tap an ability button and then the g
 
 ```
 index.html                 built game page (GitHub Pages and the server both serve it, with assets/ beside it)
-assets/                    map.webp, heroes/*.png, minions/*.png
+assets/                    map.webp, heroes/*.png and heroes/tan/*.png, minions/*.png and minions/tan/*.png
 art-src/                   the original illustrations and the map sections
 build.js                   concatenates src/ into index.html
 src/00-shell.html          page markup and styles
