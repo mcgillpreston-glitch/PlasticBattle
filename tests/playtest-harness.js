@@ -123,7 +123,7 @@ function tagOf(PF,b){ if (b.tag) return b.tag; var s=PF.G.structs.find(function(
   const hot = byKey(sig, e => 't=' + (Math.round(e.lt * 50) / 50).toFixed(2) + ' ' + (e.off > 60 ? 'north' : e.off < -60 ? 'south' : 'mid') + ' ' + e.cause);
   const rep = {
     course: { runs: runs.length, skipped: course.length - runs.length, failed: fails.length, slow: slow.length,
-      failsBy: byKey(fails, r => 'r' + r.ur + ' ' + r.tag), slowBy: byKey(slow, r => 'r' + r.ur + ' ' + r.tag) },
+      failsBy: byKey(fails, r => 'r' + r.ur + ' ' + r.tag), slowBy: byKey(slow, r => 'r' + r.ur + ' ' + r.tag), fails: fails.map(r => ({ ur: r.ur, tag: r.tag, from: [Math.round(r.sx), Math.round(r.sy)], to: [Math.round(r.ex), Math.round(r.ey)], miss: r.miss })) },
     matches: summary,
     stuck: { events: events.length, over1_5s: sig.length, totalStuckSeconds: Math.round(events.reduce((a, e) => a + e.dur, 0)),
       byCause: byKey(sig, e => e.cause), byKind: byKey(sig, e => e.kind), longest: Math.round(Math.max(0, ...events.map(e => e.dur)) * 10) / 10,

@@ -93,7 +93,7 @@ function netStart(m) {
   G.player = NET.byId[m.you];
   rebuildBlockers();
   NETC.snaps = []; NETC.cur = null; NETC.off = null; NETC.jit = null; NETC.lastArr = null;
-  ordersModal.hidden = true; swapModal.hidden = true; closeSB(); document.getElementById('endModal').hidden = true;
+  ordersModal.hidden = true; swapModal.hidden = true; menuEl.hidden = true; closeSB(); document.getElementById('endModal').hidden = true;
   draftEl.hidden = true; document.getElementById('help').hidden = false;
   enterMatch();
   showAlert('DEPLOYED WITH ' + (MYTEAM === 0 ? 'GREEN' : 'TAN') + ' ARMY · FIELD ORDERS AT BASE FROM LEVEL 3', 'info');

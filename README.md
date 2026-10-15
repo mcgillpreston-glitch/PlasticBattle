@@ -60,7 +60,7 @@ How it maps: `worker/index.js` is the Worker plus two Durable Object classes: `R
 ## The game
 
 - **Mode:** ARAM only. Draw a random hero, with one reassignment. Offline you can pick any hero in test mode and play 1v1, 3v3 or 5v5 against bots.
-- **Map:** The Sandbox, a painted 4K backyard sandbox (`assets/map.webp`, one world unit per pixel). Green holds the sand fort bottom-left, Tan the fort top-right, and **three lanes** run between them: top (around the left and along the back board), mid (straight through the centre bridge) and bottom (along the front and up the right side). Each lane has an outer and an inner sand turret per team; a lane's inner turret can only be hit once its outer turret is down, and a fort opens up once any of its three inner turrets has fallen. The hills, trenches, sandbag walls and barrels in the painting are not walkable; the rutted sand bands are, and weeds hide units.
+- **Map:** The Sandbox, a painted 4K backyard sandbox (`assets/map.webp`, one world unit per pixel). Green holds the sand fort bottom-left, Tan the fort top-right, and **three lanes** run between them: top (around the left and along the back board), mid (straight through the centre bridge) and bottom (along the front and up the right side). Each lane has three pillbox turrets per team (outer, middle, inner), sitting inside the painting's sand towers and sandbag gun nests where there is one near the slot and in a drawn sandbag nest elsewhere; a lane's turrets fall in order, and a fort opens up once any lane's three turrets are down. A rut between the left tower ring and the centre hill joins the top and mid lanes. The hills, trenches, sandbag walls and barrels in the painting are not walkable; the rutted sand bands are, and weeds hide units.
 - **Reserves:** every 25 s each lane gets two riflemen and two bayonet chargers; every third wave one lane gets a toy tank and the other two get mortar crews; a jeep joins a lane once the enemy's inner turret there is down.
 - **Heroes:** 16, one for each classic army-men pose, drawn from illustrated figures (`assets/heroes/` for Green, `assets/heroes/tan/` for Tan; a missing tan file falls back to a recolour of the green one). Each has Q/W/E/R, plus D (Tag Round, then press again to close in) and F (Hit the Deck).
 - **Going down:** when your soldier is eliminated the screen switches to a thermal feed (cold blue sandbox, white-hot soldiers, shots and blasts) and a KIA recap shows who hit you in the last 12 seconds, with what, for how much, who landed the killing blow, and the reinforcement countdown. The camera holds on the spot where you fell, you can drag to look around, and it swings back to base just before you respawn. Field Orders can still be issued while reinforcing, and so can a **reassignment**: press C (or the button on the KIA plate) to open the figure select again and come back as a different soldier. Level, XP, Field Orders and your record carry over, the new kit starts with fresh cooldowns, and figures already in your squad are unavailable. Online, the server applies the change and everyone sees the new figure.
@@ -73,13 +73,14 @@ How it maps: `worker/index.js` is the Worker plus two Durable Object classes: `R
 |---|---|
 | Click | Move or attack |
 | A + click | Attack-move |
-| Q W E R | Cast toward the cursor |
+| Q W E R | Cast toward the cursor (hover a button for what it does, its numbers and cooldown) |
 | D | Tag Round, then D again to close in |
 | F | Hit the Deck (dive) |
 | S | Halt |
 | Tab (hold) | Intel report (scoreboard) |
 | O | Field Orders |
 | C | Change figure (while reinforcing) |
+| Esc | Menu: game code and invite link, sound and volume, low-resolution mode, screen shake, FPS readout, leave game |
 | Space / Y | Centre camera / toggle camera lock |
 | Mouse wheel | Zoom |
 | ` | Range-control panel. Online, only the display toggles show (ranges, collision, sound). |

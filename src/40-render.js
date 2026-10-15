@@ -5,7 +5,7 @@ var cv = document.getElementById('game'), ctx = cv.getContext('2d');
 var mini = document.getElementById('miniCv'), mctx = mini.getContext('2d');
 var DPR = 1, VW = 0, VH = 0, terrain = null, grainCv = null, blendOK = { saturation: false, overlay: false };
 function resize() {
-  DPR = Math.min(1.5, window.devicePixelRatio || 1);
+  DPR = Math.min(opts.lowRes ? 1 : 1.5, window.devicePixelRatio || 1);
   VW = cv.clientWidth; VH = cv.clientHeight;
   cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
   SIDE_W = 0;
@@ -23,16 +23,38 @@ function checkBlend() {
   var t = document.createElement('canvas').getContext('2d');
   ['saturation', 'overlay'].forEach(function (m) { t.globalCompositeOperation = m; blendOK[m] = t.globalCompositeOperation === m; });
 }
+var grainPat = null;
 function makeGrain() {
   grainCv = document.createElement('canvas'); grainCv.width = 192; grainCv.height = 192;
   var c = grainCv.getContext('2d'), img = c.createImageData(192, 192), d = img.data;
-  for (var i = 0; i < d.length; i += 4) { var v = 100 + Math.random() * 110; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+  for (var i = 0; i < d.length; i += 4) { var v = 100 + Math.random() * 110; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 40; }
   c.putImageData(img, 0, 0);
+  grainPat = ctx.createPattern(grainCv, 'repeat');
 }
 /* The battlefield is the painted sandbox (assets/map.webp, one world unit per pixel). ASSETS is filled by loadAssets() before the game starts. */
-var ASSETS = { map: null, miniCv: null };
+var ASSETS = { map: null, miniCv: null, tiles: null };
+/* The map is cut into 512 px tiles at three scales (1, 1/2, 1/4) so a frame draws only the tiles in view, at a size near the zoom level;
+   that keeps per-frame pixel work small on any renderer instead of scaling the whole 4K image every frame. */
+var TILE = 512;
+function buildTiles() {
+  if (!ASSETS.map) return;
+  var levels = [];
+  [1, 0.5, 0.25].forEach(function (sc) {
+    var ts = TILE * sc, nx = Math.ceil(MAP.W / TILE), ny = Math.ceil(MAP.H / TILE), tiles = [];
+    for (var j = 0; j < ny; j++) for (var i = 0; i < nx; i++) {
+      var w = Math.min(TILE, MAP.W - i * TILE), h = Math.min(TILE, MAP.H - j * TILE);
+      var c = document.createElement('canvas'); c.width = Math.ceil(w * sc); c.height = Math.ceil(h * sc);
+      var x = c.getContext('2d'); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+      x.drawImage(ASSETS.map, i * TILE, j * TILE, w, h, 0, 0, c.width, c.height);
+      tiles.push({ cv: c, x: i * TILE, y: j * TILE, w: w, h: h });
+    }
+    levels.push({ sc: sc, nx: nx, ny: ny, tiles: tiles });
+  });
+  ASSETS.tiles = levels;
+}
 function buildTerrain() {
   /* a small, radar-tinted copy of the map for the minimap */
+  buildTiles();
   var mc = document.createElement('canvas'); mc.width = 440; mc.height = Math.round(440 * MAP.H / MAP.W);
   var c = mc.getContext('2d');
   if (ASSETS.map) { c.drawImage(ASSETS.map, 0, 0, mc.width, mc.height); c.globalCompositeOperation = 'saturation'; c.fillStyle = '#000'; c.fillRect(0, 0, mc.width, mc.height); c.globalCompositeOperation = 'multiply'; c.fillStyle = '#4FA85A'; c.fillRect(0, 0, mc.width, mc.height); c.globalCompositeOperation = 'source-over'; }
@@ -40,9 +62,13 @@ function buildTerrain() {
   ASSETS.miniCv = mc;
   return mc;
 }
-function drawTerrain() {
-  if (ASSETS.map) ctx.drawImage(ASSETS.map, 0, 0, MAP.W, MAP.H);
-  else { ctx.fillStyle = '#D9C086'; ctx.fillRect(0, 0, MAP.W, MAP.H); }
+function drawTerrain(zoom) {
+  if (!ASSETS.tiles) { if (ASSETS.map) ctx.drawImage(ASSETS.map, 0, 0, MAP.W, MAP.H); else { ctx.fillStyle = '#D9C086'; ctx.fillRect(0, 0, MAP.W, MAP.H); } return; }
+  var z = zoom || cam.z, L = ASSETS.tiles[z > 0.7 ? 0 : z > 0.35 ? 1 : 2];
+  var tl = s2w(0, 0), br = s2w(VW, VH), pad = 4;
+  var i0 = Math.max(0, Math.floor(tl.x / TILE)), i1 = Math.min(L.nx - 1, Math.floor(br.x / TILE)), j0 = Math.max(0, Math.floor(tl.y / TILE)), j1 = Math.min(L.ny - 1, Math.floor(br.y / TILE));
+  if (i0 > i1 || j0 > j1) return;
+  for (var j = j0; j <= j1; j++) for (var i = i0; i <= i1; i++) { var t = L.tiles[j * L.nx + i]; ctx.drawImage(t.cv, t.x, t.y, t.w + (i < i1 ? 0.5 : 0), t.h + (j < j1 ? 0.5 : 0)); }
 }
 function camXf(shx, shy) { ctx.translate(viewCX() + shx, VH / 2 + shy); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y); }
 function draw() {
@@ -58,11 +84,11 @@ function draw() {
   drawMini();
 }
 /* The world: terrain, props, structures, units, shots and effects. Draws through whatever `ctx` currently is (the screen, or the small thermal canvas). */
-function drawScene(shx, shy) {
+function drawScene(shx, shy, zoomHint) {
   ctx.save();
   camXf(shx, shy);
   ctx.imageSmoothingEnabled = true;
-  drawTerrain();
+  drawTerrain(zoomHint || cam.z);
   [0, 1].forEach(function (t) { var fp = fountain(t); ctx.fillStyle = t === MYTEAM ? 'rgba(91,214,107,0.12)' : 'rgba(240,69,58,0.12)'; ell(ctx, fp.x, fp.y, 330, 330); ctx.fill(); });
   BRUSH.forEach(function (b, i) { drawThicket(b, i); });
   G.fx.forEach(function (f) { if (f.k === 'scorch' || f.k === 'glow' || f.k === 'castring') drawFx(f); });
@@ -89,7 +115,15 @@ function drawScene(shx, shy) {
       ctx.beginPath(); ctx.moveTo(u.x, u.y); u.path.forEach(function (p) { ctx.lineTo(p.x, p.y); }); ctx.stroke(); ctx.setLineDash([]);
     });
   }
-  if (G.moveMark) { var mm = G.moveMark, ma = Math.min(1, mm.t / 0.3); ctx.strokeStyle = 'rgba(214,203,170,' + ma + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(mm.x - 10, mm.y - 6); ctx.lineTo(mm.x + 10, mm.y + 6); ctx.moveTo(mm.x + 10, mm.y - 6); ctx.lineTo(mm.x - 10, mm.y + 6); ctx.stroke(); ell(ctx, mm.x, mm.y, 18, 9); ctx.stroke(); }
+  if (G.moveMark) {
+    // move order marker: a bright green ring that pulses inward over a dark outline, with a centre dot, so it reads on bright sand
+    var mm = G.moveMark, age = 1.2 - mm.t, ma = Math.min(1, mm.t / 0.3), pr = 1 - ((age * 2.2) % 1), col = mm.amove ? '255,120,60' : '120,255,110';
+    ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(0,0,0,' + (0.6 * ma) + ')'; ell(ctx, mm.x, mm.y, 26, 13); ctx.stroke(); ell(ctx, mm.x, mm.y, 12 + 30 * pr, (12 + 30 * pr) * 0.5); ctx.stroke();
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(' + col + ',' + ma + ')'; ell(ctx, mm.x, mm.y, 26, 13); ctx.stroke();
+    ctx.strokeStyle = 'rgba(' + col + ',' + (ma * (1 - pr)) + ')'; ell(ctx, mm.x, mm.y, 12 + 30 * pr, (12 + 30 * pr) * 0.5); ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,' + (0.7 * ma) + ')'; ell(ctx, mm.x, mm.y, 6, 4); ctx.fill(); ctx.fillStyle = 'rgba(' + col + ',' + ma + ')'; ell(ctx, mm.x, mm.y, 4, 2.5); ctx.fill();
+    if (G.player && !G.player.dead) { ctx.setLineDash([8, 10]); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(' + col + ',' + (0.5 * ma) + ')'; ctx.beginPath(); ctx.moveTo(G.player.x, G.player.y); ctx.lineTo(mm.x, mm.y); ctx.stroke(); ctx.setLineDash([]); }
+  }
   if (aimSlot && G.player && !G.player.dead) drawAim(G.player, aimSlot);
   if (G.player && !G.player.dead && G.player.target) drawAttackArc(G.player);
   drawAimLines();
@@ -127,7 +161,7 @@ function drawScene(shx, shy) {
 function drawOverlays(shx, shy) {
   ctx.save();
   camXf(shx, shy);
-  G.structs.forEach(function (s) { if (!s.dead) bar(s.x, s.y - (s.kind === 'hq' ? 190 : 150), s.kind === 'hq' ? 170 : 110, 9, s.hp / s.maxHp, s.team, targetable(s) ? null : 'locked'); });
+  G.structs.forEach(function (s) { if (!s.dead) bar(s.x, s.y - structTop(s), s.kind === 'hq' ? 170 : 110, 9, s.hp / s.maxHp, s.team, targetable(s) ? null : 'locked'); });
   G.units.forEach(function (u) {
     if (u.dead || !visibleTo(u, MYTEAM)) return;
     var hh = unitH(u);
@@ -168,7 +202,7 @@ function thermalPass(amt, shx, shy) {
   ctx.setTransform(k, 0, 0, k, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.imageSmoothingEnabled = true;
   ctx.fillStyle = '#3A5A2A'; ctx.fillRect(0, 0, VW, VH);
   var _t0 = performance.now();
-  drawScene(shx, shy);
+  drawScene(shx, shy, cam.z * k);
   if (T.prof) T.prof.scene = performance.now() - _t0;
   ctx.setTransform(k, 0, 0, k, 0, 0);
   ctx.fillStyle = 'rgba(0,0,0,0.66)'; ctx.fillRect(0, 0, VW, VH);
@@ -184,7 +218,7 @@ function thermalPass(amt, shx, shy) {
   }
   if (G.barrage) G.barrage.beams.forEach(function (b) { if (b.x != null) blob(b.x, b.y, G.barrage.r, G.barrage.r * 0.65, 0.85, true); });
   x.globalCompositeOperation = 'lighter';
-  G.structs.forEach(function (st) { if (st.dead) { blob(st.x, st.y - 30, st.r * 1.2, st.r * 0.8, 0.22); return; } blob(st.x, st.y - (st.kind === 'hq' ? 110 : 80), st.r * 0.8, st.r * 0.6, 0.34); });
+  G.structs.forEach(function (st) { if (st.dead) { blob(st.x, st.y - 30, st.r * 1.2, st.r * 0.8, 0.22); return; } blob(st.x, st.y - structTop(st) * 0.6, st.r * 0.8, st.r * 0.6, 0.34); });
   G.units.forEach(function (u) {
     if (u.dead ? (u.deathT || 0) > 1.4 : (!visibleTo(u, MYTEAM) || u._hidden)) return;
     var h = unitH(u), veh = u.type === 'tank' || u.type === 'jeep', heat = u.kind === 'hero' ? 1 : veh ? 0.92 : 0.8;
@@ -222,15 +256,15 @@ function thermalPass(amt, shx, shy) {
   ctx.globalAlpha = 1; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (T.prof) T.prof.map = performance.now() - _t0;
 }
+var postCache = {};
 function postProcess() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   var therm = (G && G.thermal) || 0;
-  if (blendOK.overlay && therm < 1) { ctx.globalCompositeOperation = 'overlay'; ctx.fillStyle = 'rgba(255,214,150,' + (0.2 * (1 - therm)) + ')'; ctx.fillRect(0, 0, VW, VH); }
-  ctx.globalCompositeOperation = blendOK.overlay ? 'overlay' : 'source-over';
-  ctx.globalAlpha = (blendOK.overlay ? 0.07 : 0.03) + therm * 0.1;
-  var ox = -Math.floor(Math.random() * 192), oy = -Math.floor(Math.random() * 192);
-  ctx.save(); ctx.translate(ox, oy); var gp = ctx.createPattern(grainCv, 'repeat'); ctx.fillStyle = gp; ctx.fillRect(-ox, -oy, VW + 192, VH + 192); ctx.restore();
-  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  if (therm > 0 && opts.grain !== false) {
+    // sensor noise on the thermal feed only; the sunny scene is left as painted (full-screen blend modes are slow on some browsers)
+    var ox = -Math.floor(Math.random() * 192), oy = -Math.floor(Math.random() * 192);
+    ctx.globalAlpha = therm * 0.6; ctx.save(); ctx.translate(ox, oy); ctx.fillStyle = grainPat; ctx.fillRect(-ox, -oy, VW + 192, VH + 192); ctx.restore(); ctx.globalAlpha = 1;
+  }
   var cx = viewCX(), cy = VH / 2;
   if (therm > 0) {
     if (!THERM.scan) { THERM.scan = document.createElement('canvas'); THERM.scan.width = 4; THERM.scan.height = 3; var sc = THERM.scan.getContext('2d'); sc.fillStyle = 'rgba(0,0,0,0.5)'; sc.fillRect(0, 2, 4, 1); }
@@ -243,9 +277,8 @@ function postProcess() {
     var m = 18, len = 34; ctx.strokeStyle = 'rgba(255,255,255,' + (0.55 * therm) + ')'; ctx.lineWidth = 2;
     [[m, m, 1, 1], [VW - m, m, -1, 1], [m, VH - m, 1, -1], [VW - m, VH - m, -1, -1]].forEach(function (c) { ctx.beginPath(); ctx.moveTo(c[0], c[1] + c[3] * len); ctx.lineTo(c[0], c[1]); ctx.lineTo(c[0] + c[2] * len, c[1]); ctx.stroke(); });
   }
-  var vg = ctx.createRadialGradient(cx, cy, Math.min(VW, VH) * 0.45, cx, cy, Math.max(VW, VH) * 0.8);
-  vg.addColorStop(0, 'rgba(10,12,8,0)'); vg.addColorStop(1, 'rgba(10,12,8,0.42)');
-  ctx.fillStyle = vg; ctx.fillRect(0, 0, VW, VH);
+  if (!postCache.vg || postCache.w !== VW || postCache.h !== VH) { postCache.w = VW; postCache.h = VH; postCache.vg = ctx.createRadialGradient(cx, cy, Math.min(VW, VH) * 0.45, cx, cy, Math.max(VW, VH) * 0.8); postCache.vg.addColorStop(0, 'rgba(10,12,8,0)'); postCache.vg.addColorStop(1, 'rgba(10,12,8,0.3)'); }
+  ctx.fillStyle = postCache.vg; ctx.fillRect(0, 0, VW, VH);
   var p = G.player, low = p && !p.dead ? clamp(1 - (p.hp / maxHp(p)) / 0.3, 0, 1) : 0;
   var hurt = Math.max(G.hurtT > 0 ? clamp(G.hurtT, 0, 0.6) : 0, low * (0.3 + 0.18 * Math.sin(G.time * 7)));
   if (hurt > 0) { var hg = ctx.createRadialGradient(cx, cy, Math.min(VW, VH) * 0.25, cx, cy, Math.max(VW, VH) * 0.7); hg.addColorStop(0, 'rgba(170,20,20,0)'); hg.addColorStop(1, 'rgba(170,20,20,' + hurt + ')'); ctx.fillStyle = hg; ctx.fillRect(0, 0, VW, VH); }
@@ -314,12 +347,7 @@ function drawStruct(s) {
   ctx.save(); ctx.translate(s.x, s.y);
   var C = TEAMC[s.team], dead = s.dead, rec = s.recoilT > 0 ? s.recoilT * 20 : 0;
   if (s.kind === 'outpost') {
-    ctx.scale(1.4, 1.4);
-    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ell(ctx, 6, 8, s.r + 24, (s.r + 24) * 0.42); ctx.fill();
-    ctx.fillStyle = 'rgba(120,95,50,0.3)'; ell(ctx, 0, 0, 74, 34); ctx.fill();
-    sandTower(0, 0, 44, 46, dead, C);
-    if (!dead) { var sp = sprite('gunner', s.team, 70, s.team === 1); ctx.drawImage(sp.cv, sp.ox - (s.team === 1 ? -rec : rec), -40 + sp.oy, sp.w, sp.h); }
-    if (s.flashT > 0 && !dead) { ctx.globalAlpha = s.flashT / 0.08 * 0.6; ctx.fillStyle = '#fff'; ctx.fillRect(-46, -60, 92, 60); ctx.globalAlpha = 1; }
+    drawPillbox(s, C, dead, rec);
   } else {
     // the painted fort is the HQ: smoke, scorch and a flag when alive; rubble tint and a toppled flag when it falls
     if (!dead) {
@@ -333,6 +361,39 @@ function drawStruct(s) {
     }
   }
   ctx.restore();
+}
+/* Turret: a pillbox. Painted towers and nests get only a gun, pennant and damage drawn over the painting; other slots get a drawn sandbag nest. */
+function structTop(s) { return s.kind === 'hq' ? 190 : s.painted === 'tower' ? 165 : s.painted === 'nest' ? 95 : 110; }
+function drawPillbox(s, C, dead, rec) {
+  var top = s.painted === 'tower' ? -118 : s.painted === 'nest' ? -46 : -58, team = s.team;
+  if (!s.painted) {
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ell(ctx, 6, 8, 78, 34); ctx.fill();
+    ctx.fillStyle = dead ? '#B9A070' : '#D7BE82'; ell(ctx, 0, 0, 66, 30); ctx.fill();
+    for (var i = 0; i < 14; i++) { var a = i / 14 * Math.PI * 2, bx = Math.cos(a) * 62, by = Math.sin(a) * 27 - 6; ctx.fillStyle = dead ? '#A8906A' : (i % 2 ? '#E2CB92' : '#D2B77C'); ell(ctx, bx, by, 15, 9); ctx.fill(); ctx.strokeStyle = '#4A3A22'; ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.fillStyle = dead ? '#3A3A30' : C.c2; ctx.strokeStyle = '#141A0B'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(-30, -14); ctx.lineTo(30, -14); ctx.lineTo(30, -50); ctx.lineTo(-30, -50); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = dead ? '#4A4A40' : C.c1; ell(ctx, 0, -50, 30, 12); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#0B0D10'; ctx.fillRect(-18, -36, 36, 8);
+  }
+  if (!dead) {
+    // gun on top, swung toward the target
+    var tg = s.target && !s.target.dead ? s.target : null, ang = tg ? Math.atan2(tg.y - (s.y + top), tg.x - s.x) : (team === 0 ? -0.6 : Math.PI + 0.6);
+    ctx.save(); ctx.translate(0, top); ctx.rotate(ang);
+    ctx.fillStyle = '#23262B'; ctx.strokeStyle = '#0A0B0D'; ctx.lineWidth = 2;
+    rrect(ctx, -16 - rec, -9, 30, 18, 4); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = C.c2; rrect(ctx, 12 - rec, -5, 44, 10, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#0A0B0D'; ell(ctx, 56 - rec, 0, 4, 5); ctx.fill();
+    ctx.restore();
+    // pennant
+    ctx.strokeStyle = '#2A2118'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(22, top - 6); ctx.lineTo(22, top - 58); ctx.stroke();
+    ctx.fillStyle = team === 0 ? '#3FBF55' : '#E8342A'; ctx.beginPath(); ctx.moveTo(23, top - 58); ctx.lineTo(50, top - 48); ctx.lineTo(23, top - 38); ctx.closePath(); ctx.fill();
+    if (s.flashT > 0) { ctx.globalAlpha = s.flashT / 0.08 * 0.55; ctx.fillStyle = '#fff'; ell(ctx, 0, top * 0.5, 70, 60); ctx.fill(); ctx.globalAlpha = 1; }
+    var hpf = s.hp / s.maxHp; if (hpf < 0.5) { ctx.fillStyle = 'rgba(40,30,20,' + (0.45 * (1 - hpf)) + ')'; ell(ctx, 0, top * 0.4, 60, 40); ctx.fill(); }
+  } else {
+    ctx.fillStyle = 'rgba(30,22,14,0.55)'; ell(ctx, 0, top * 0.4, 72, 44); ctx.fill();
+    ctx.strokeStyle = '#2A2118'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-40, top * 0.3 - 30); ctx.lineTo(30, top * 0.3 + 20); ctx.moveTo(-20, top * 0.3 + 24); ctx.lineTo(36, top * 0.3 - 28); ctx.stroke();
+    ctx.fillStyle = '#4A3A22'; [[-30, 8], [10, 16], [34, -2], [-6, -8]].forEach(function (p) { ell(ctx, p[0], p[1] + top * 0.6, 10, 6); ctx.fill(); });
+  }
 }
 function sandbagS(x, y, dead) { ctx.fillStyle = dead ? '#B99F6B' : '#D9C086'; ell(ctx, x, y, 14, 8); ctx.fill(); ctx.strokeStyle = '#A48A55'; ctx.lineWidth = 1.5; ctx.stroke(); }
 function drawUnit(u) {

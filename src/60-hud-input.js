@@ -1,7 +1,75 @@
 /* Browser only: HUD, scoreboard, Field Orders UI, input, Roll Call, game loop. */
 
 /* ---------------- HUD ---------------- */
-var abilEl = document.getElementById('abil');
+var abilEl = document.getElementById('abil'), tipEl = document.getElementById('tip');
+/* Ability icons: one glyph per ability type, drawn on a small canvas (yellow on dark), so every kit reads at a glance. */
+function abilityIcon(ab, slot) {
+  var c = document.createElement('canvas'); c.width = 88; c.height = 88; c.className = 'ico';
+  var x = c.getContext('2d'), k = ab.t, col = slot === 'R' ? '#FF5A4E' : slot === 'D' || slot === 'F' ? '#CFD8E0' : '#FFD24A';
+  x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = col; x.fillStyle = col; x.lineWidth = 6; x.translate(44, 44);
+  function ring(r) { x.beginPath(); x.arc(0, 0, r, 0, Math.PI * 2); x.stroke(); }
+  function line(a, b, c2, d) { x.beginPath(); x.moveTo(a, b); x.lineTo(c2, d); x.stroke(); }
+  switch (k) {
+    case 'proj': if (ab.rocket) { x.beginPath(); x.moveTo(-26, 22); x.lineTo(14, -18); x.lineTo(24, -28); x.lineTo(30, -20); x.lineTo(20, -8); x.lineTo(-20, 28); x.closePath(); x.fill(); x.lineWidth = 4; line(-30, 10, -16, 26); line(-24, -6, 2, 4); }
+      else if (ab.pull) { ring(14); line(14, 0, 34, 0); line(-30, -30, -10, -10); x.beginPath(); x.moveTo(-34, -22); x.lineTo(-34, -34); x.lineTo(-22, -34); x.stroke(); }
+      else { x.beginPath(); x.moveTo(-30, 10); x.lineTo(10, -30); x.lineTo(26, -26); x.lineTo(30, -10); x.lineTo(-10, 30); x.closePath(); x.fill(); x.lineWidth = 4; line(-34, 22, -22, 34); } break;
+    case 'lob': if (ab.dmg === 0) { x.globalAlpha = 0.9; [[-14, 6, 18], [8, -2, 20], [-2, 14, 16], [16, 14, 12]].forEach(function (p) { x.beginPath(); x.arc(p[0], p[1], p[2], 0, Math.PI * 2); x.fill(); }); }
+      else if (ab.count) { x.lineWidth = 4; x.beginPath(); x.arc(0, 0, 30, Math.PI * 1.05, Math.PI * 1.95); x.stroke(); [[-22, 12], [0, 18], [22, 12]].forEach(function (p) { x.beginPath(); x.arc(p[0], p[1], 9, 0, Math.PI * 2); x.fill(); }); }
+      else { x.beginPath(); x.arc(0, 6, 20, 0, Math.PI * 2); x.fill(); x.fillStyle = '#0B0D10'; x.fillRect(-8, -14, 16, 6); x.fillStyle = col; x.fillRect(-10, -24, 20, 10); x.lineWidth = 4; x.beginPath(); x.arc(0, 0, 36, Math.PI * 1.15, Math.PI * 1.55); x.stroke(); } break;
+    case 'cone': x.beginPath(); x.moveTo(-30, 0); x.arc(-30, 0, 62, -0.42, 0.42); x.closePath(); x.globalAlpha = 0.35; x.fill(); x.globalAlpha = 1; x.lineWidth = 5; x.beginPath(); x.moveTo(-30, 0); x.lineTo(28, -26); x.moveTo(-30, 0); x.lineTo(28, 26); x.moveTo(-30, 0); x.lineTo(34, 0); x.stroke(); break;
+    case 'dash': x.lineWidth = 7; line(-32, 0, 22, 0); x.beginPath(); x.moveTo(8, -18); x.lineTo(28, 0); x.lineTo(8, 18); x.stroke(); x.lineWidth = 4; line(-32, -16, -14, -16); line(-32, 16, -14, 16); break;
+    case 'leap': x.lineWidth = 6; x.beginPath(); x.arc(0, 10, 32, Math.PI, Math.PI * 2); x.stroke(); line(-32, 10, -10, 26); line(32, 10, 10, 26); x.beginPath(); x.arc(0, 30, 9, 0, Math.PI * 2); x.fill(); break;
+    case 'buff': x.lineWidth = 7; for (var i = 0; i < 3; i++) { x.beginPath(); x.moveTo(-22, 20 - i * 16); x.lineTo(0, 0 - i * 16); x.lineTo(22, 20 - i * 16); x.stroke(); } break;
+    case 'shield': x.lineWidth = 6; x.beginPath(); x.moveTo(0, -34); x.lineTo(30, -22); x.lineTo(26, 10); x.lineTo(0, 34); x.lineTo(-26, 10); x.lineTo(-30, -22); x.closePath(); x.stroke(); x.globalAlpha = 0.35; x.fill(); break;
+    case 'nova': x.lineWidth = 5; ring(12); ring(26); x.globalAlpha = 0.5; ring(38); break;
+    case 'chan': x.lineWidth = 5; ring(10); line(0, -36, 0, -18); line(0, 18, 0, 36); line(-36, 0, -18, 0); line(18, 0, 36, 0); x.globalAlpha = 0.6; ring(28); break;
+    case 'mine': x.beginPath(); x.ellipse(0, 8, 32, 14, 0, 0, Math.PI * 2); x.fill(); x.fillStyle = '#0B0D10'; x.beginPath(); x.ellipse(0, 4, 20, 7, 0, 0, Math.PI * 2); x.fill(); x.fillStyle = '#FF5A4E'; x.beginPath(); x.arc(0, -4, 6, 0, Math.PI * 2); x.fill(); break;
+    case 'team': x.lineWidth = 6; line(-24, 34, -24, -34); x.beginPath(); x.moveTo(-24, -34); x.lineTo(30, -22); x.lineTo(-24, -6); x.closePath(); x.fill(); break;
+    case 'jack': x.lineWidth = 5; ring(16); x.globalAlpha = 0.6; ring(30); x.globalAlpha = 1; x.beginPath(); x.arc(0, 0, 6, 0, Math.PI * 2); x.fill(); break;
+    default: ring(20);
+  }
+  return c;
+}
+/* Plain-language description of what an ability does, built from its numbers. */
+function abilityDesc(u, slot, ab) {
+  var dm = dmgMul(u), d = ab.dmg ? Math.round(ab.dmg * dm) : 0, parts = [];
+  var what = { proj: ab.rocket ? 'Fires a rocket' : ab.pull ? 'Fires a line that pulls the first enemy hit toward you' : ab.pierce ? 'Fires a round that passes through every enemy in its path' : ab.burn ? 'Throws a knife that sets the target burning' : 'Fires a shot',
+    lob: ab.dmg === 0 ? 'Throws smoke: enemies inside are slowed and blinded' : ab.count ? 'Lobs ' + ab.count + ' shells' + (ab.line ? ' in a line' : ' across an area') : 'Lobs a shell that bursts on landing',
+    cone: ab.dur > 0.2 ? 'Sweeps a cone in front of you' : 'Blasts everything in a cone in front of you',
+    dash: ab.dmg ? 'Dash forward, hitting enemies you pass through' : 'Dash a short distance' + (ab.iframe ? ', untouchable for a moment' : ''),
+    leap: 'Leap to the target and land hard on everything around it',
+    buff: 'Buff yourself', shield: ab.ally ? 'Shield an ally (or yourself)' : 'Raise a shield',
+    nova: 'Burst outward from where you stand', chan: 'Hold fire for ' + ab.dur + 's, spraying ' + Math.round(ab.dmg * dm) + ' damage rounds',
+    mine: ab.count ? 'Plant ' + ab.count + ' mines around the target' : 'Plant a mine that arms after a moment', team: 'Rally the whole team', jack: 'Fire a tag round; press D again to close in on the tagged enemy' }[ab.t] || 'Use ' + ab.n;
+  parts.push(what + '.');
+  if (ab.b) { var b = ab.b, bits = []; if (b.as) bits.push('+' + Math.round(b.as * 100) + '% attack speed'); if (b.ms) bits.push('+' + Math.round(b.ms * 100) + '% move speed'); if (b.dmgMul) bits.push('+' + Math.round(b.dmgMul * 100) + '% damage'); if (b.lifesteal) bits.push(Math.round(b.lifesteal * 100) + '% lifesteal'); if (b.range) bits.push('+' + b.range + ' range'); if (b.ghost) bits.push('unseen'); if (b.root) bits.push('rooted'); if (b.aura) bits.push('burns nearby enemies for ' + b.aura + '/s'); if (b.dmgRed) bits.push(Math.round(b.dmgRed * 100) + '% less damage taken'); if (b.selfdps) bits.push('costs ' + b.selfdps + ' HP/s'); if (bits.length) parts.push(bits.join(', ') + (ab.dur ? ' for ' + ab.dur + 's' : '') + '.'); }
+  if (ab.shield && ab.t === 'team') parts.push('Everyone gains a ' + ab.shield + ' shield.');
+  if (ab.exec) parts.push('Finishes enemies below ' + Math.round(ab.exec * 100) + '% health.');
+  if (ab.slow) parts.push('Slows by ' + Math.round(ab.slow * 100) + '%.');
+  if (ab.knock) parts.push('Knocks enemies back.');
+  var stats = [];
+  if (d) stats.push(['Damage', d + (ab.count ? ' each' : '')]);
+  if (ab.amt) stats.push(['Shield', ab.amt]);
+  if (ab.range) stats.push(['Range', ab.range]); else if (ab.dist) stats.push(['Distance', ab.dist]);
+  if (ab.r) stats.push(['Radius', ab.r]);
+  if (ab.dur && !ab.b) stats.push(['Duration', ab.dur + 's']);
+  stats.push(['Cooldown', Math.round(ab.cd * cdMul(u, slot)) + 's']);
+  return { text: parts.join(' '), stats: stats };
+}
+function showTip(slot, btn) {
+  var u = G && G.player; if (!u) return;
+  var ab = abilityOf(u, slot), info = abilityDesc(u, slot, ab);
+  tipEl.innerHTML = '<h4></h4><div class="txt"></div><div class="stats"></div>';
+  tipEl.querySelector('h4').innerHTML = '<span class="nm"></span><span></span>';
+  tipEl.querySelector('h4 .nm').textContent = ab.n; tipEl.querySelector('h4 span:last-child').textContent = slot === 'D' ? 'D · utility' : slot === 'F' ? 'F · utility' : slot + (slot === 'R' ? ' · ultimate' : '');
+  tipEl.querySelector('.txt').textContent = info.text;
+  var st = tipEl.querySelector('.stats'); info.stats.forEach(function (p) { var sp = document.createElement('span'); sp.innerHTML = p[0] + ' <b></b>'; sp.querySelector('b').textContent = p[1]; st.appendChild(sp); });
+  tipEl.hidden = false;
+  var r = btn.getBoundingClientRect(), app = document.getElementById('app').getBoundingClientRect();
+  var left = clamp(r.left + r.width / 2 - 150 - app.left, 8, app.width - 308), top = r.top - app.top - tipEl.offsetHeight - 10;
+  tipEl.style.left = left + 'px'; tipEl.style.top = Math.max(8, top) + 'px';
+}
+function hideTip() { tipEl.hidden = true; }
 function buildAbilityBar() {
   abilEl.innerHTML = '';
   ['Q', 'W', 'E', 'R', 'D', 'F'].forEach(function (slot) {
@@ -9,10 +77,14 @@ function buildAbilityBar() {
     var b = document.createElement('button'); b.type = 'button'; b.className = 'ab' + (slot === 'R' ? ' ult' : '') + (slot === 'D' || slot === 'F' ? ' util' : '');
     b.dataset.slot = slot; b.setAttribute('aria-label', slot + ': ' + ab.n);
     b.innerHTML = '<span class="k"></span><span class="n"></span><span class="cd" hidden></span>';
+    b.insertBefore(abilityIcon(ab, slot), b.querySelector('.n'));
     b.querySelector('.k').textContent = slot; b.querySelector('.n').textContent = ab.n;
     b.addEventListener('click', function () { aimSlot = aimSlot === slot ? null : slot; refreshAim(); });
+    b.addEventListener('mouseenter', function () { showTip(slot, b); });
+    b.addEventListener('mouseleave', hideTip);
     abilEl.appendChild(b);
   });
+  hideTip();
   var pc = document.getElementById('portraitCv').getContext('2d');
   pc.setTransform(1, 0, 0, 1, 0, 0); pc.clearRect(0, 0, 128, 152); pc.scale(128 / 200, 152 / 240); paintPose(pc, G.player.pose, 0, false);
 }
@@ -147,7 +219,7 @@ function order(sx, sy) {
   else {
     var pt = freePoint(w, u.r);
     cmdMove(pt, aMovePending);
-    G.moveMark = { x: pt.x, y: pt.y, t: 1.2 };
+    G.moveMark = { x: pt.x, y: pt.y, t: 1.2, amove: !!aMovePending };
   }
   aMovePending = false;
 }
@@ -165,7 +237,7 @@ cv.addEventListener('pointerdown', function (e) {
 cv.addEventListener('pointermove', function (e) {
   var r = cv.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; mouse.inside = true;
   if (drag) { var dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 12) { drag.moved = true; cam.lock = false; cam.x = drag.cx - dx / cam.z; cam.y = drag.cy - dy / cam.z; } }
-  if (G && e.pointerType === 'mouse') { hoverT = pickAt(s2w(mouse.x, mouse.y)); cv.style.cursor = hoverT ? 'crosshair' : 'default'; }
+  if (G && e.pointerType === 'mouse') { hoverT = pickAt(s2w(mouse.x, mouse.y)); cv.className = drag && drag.moved ? 'pan' : aimSlot ? 'aim' : (hoverT || aMovePending) ? 'atk' : ''; }
 });
 cv.addEventListener('pointerleave', function () { mouse.inside = false; hoverT = null; });
 cv.addEventListener('pointerup', function (e) {
@@ -193,7 +265,11 @@ window.addEventListener('keydown', function (e) {
   else if (k === 'Y') { cam.lock = !cam.lock; showToast(cam.lock ? 'Camera locked' : 'Camera free', 1); }
   else if (k === 'O') { if (ordersModal.hidden) openOrders(); else ordersModal.hidden = true; }
   else if (k === 'C') { if (swapModal.hidden) openSwap(); else swapModal.hidden = true; }
-  else if (k === 'ESCAPE') { aimSlot = null; aMovePending = false; refreshAim(); ordersModal.hidden = true; swapModal.hidden = true; }
+  else if (k === 'ESCAPE') {
+    if (aimSlot || aMovePending) { aimSlot = null; aMovePending = false; refreshAim(); }
+    else if (!ordersModal.hidden || !swapModal.hidden) { ordersModal.hidden = true; swapModal.hidden = true; }
+    else if (!menuEl.hidden) closeMenu(); else openMenu();
+  }
   else if (k === '`') { var d = document.getElementById('dev'); d.open = !d.open; }
 });
 document.getElementById('ordersBtn').addEventListener('click', openOrders);
@@ -258,6 +334,44 @@ function renderOrders() {
 }
 document.getElementById('oClose').addEventListener('click', function () { ordersModal.hidden = true; });
 
+/* ---------------- Menu (Esc) ---------------- */
+var menuEl = document.getElementById('menu');
+function openMenu() {
+  if (!G || !draftEl.hidden) return;
+  ordersModal.hidden = true; swapModal.hidden = true; closeSB(); hideTip();
+  document.getElementById('mCode').textContent = NET.mode === 'online' && NETC.room ? NETC.room.code : 'OFFLINE';
+  document.getElementById('mCopy').hidden = !(NET.mode === 'online' && NETC.room);
+  document.getElementById('mSound').checked = !!opts.sound;
+  document.getElementById('mVol').value = Math.round((opts.volume == null ? 0.55 : opts.volume) * 100);
+  document.getElementById('mLowRes').checked = !!opts.lowRes;
+  document.getElementById('mFps').checked = !document.getElementById('dev').hidden;
+  document.getElementById('mShake').checked = !opts.noShake;
+  document.getElementById('mHelp').checked = !document.getElementById('help').hidden;
+  document.getElementById('mLeave').textContent = NET.mode === 'online' ? 'Leave the room' : 'Leave to roll call';
+  menuEl.hidden = false;
+}
+function closeMenu() { menuEl.hidden = true; }
+document.getElementById('mResume').addEventListener('click', closeMenu);
+document.getElementById('mSound').addEventListener('change', function (e) { opts.sound = e.target.checked; document.getElementById('dSound').checked = opts.sound; lsSet('pf_sound', opts.sound ? '1' : '0'); });
+document.getElementById('mVol').addEventListener('input', function (e) { opts.volume = Number(e.target.value) / 100; if (AMaster) AMaster.gain.value = opts.volume; lsSet('pf_volume', String(opts.volume)); });
+document.getElementById('mLowRes').addEventListener('change', function (e) { opts.lowRes = e.target.checked; lsSet('pf_lowres', opts.lowRes ? '1' : '0'); resize(); });
+document.getElementById('mFps').addEventListener('change', function (e) { document.getElementById('dev').hidden = !e.target.checked; lsSet('pf_fps', e.target.checked ? '1' : '0'); });
+document.getElementById('mShake').addEventListener('change', function (e) { opts.noShake = !e.target.checked; lsSet('pf_shake', e.target.checked ? '1' : '0'); });
+document.getElementById('mHelp').addEventListener('change', function (e) { document.getElementById('help').hidden = !e.target.checked; lsSet('pf_help', e.target.checked ? '1' : '0'); });
+document.getElementById('mCopy').addEventListener('click', function () { document.getElementById('lCopy').click(); this.textContent = 'Copied'; var b = this; setTimeout(function () { b.textContent = 'Copy invite link'; }, 1500); });
+document.getElementById('mLeave').addEventListener('click', function () {
+  closeMenu();
+  if (NET.mode === 'online') { NETC.room = null; NETC.inMatch = false; if (NETC.ws) { NETC.leaving = true; NETC.ws.close(); } if (G) G.over = true; openOnline(); oStatus('Left the room.'); }
+  else showDraft();
+});
+(function () {
+  if (lsGet('pf_sound') === '0') opts.sound = false;
+  var v = parseFloat(lsGet('pf_volume')); if (!isNaN(v)) opts.volume = v;
+  if (lsGet('pf_lowres') === '1') opts.lowRes = true;
+  if (lsGet('pf_shake') === '0') opts.noShake = true;
+  if (lsGet('pf_fps') === '0') document.getElementById('dev').hidden = true;
+})();
+
 /* ---------------- Reassignment (change figure while reinforcing) ---------------- */
 function openSwap() {
   var u = G && G.player; if (!u || !u.dead || G.over || u.respawn < 1) { if (u && !u.dead) showToast('You can change figure while reinforcing', 1.6); return; }
@@ -292,7 +406,7 @@ var draft = { idx: 3, shakes: 1 };
 var draftEl = document.getElementById('draft');
 function showDraft() {
   draft.idx = Math.floor(Math.random() * HEROES.length); draft.shakes = 1;
-  document.getElementById('endModal').hidden = true; ordersModal.hidden = true; swapModal.hidden = true; closeSB();
+  document.getElementById('endModal').hidden = true; ordersModal.hidden = true; swapModal.hidden = true; menuEl.hidden = true; closeSB();
   draftEl.hidden = false; setTab(false); renderDraft();
 }
 function renderDraft() {
@@ -314,7 +428,7 @@ document.getElementById('deploy').addEventListener('click', function () {
   audioInit();
   newGame(draft.idx, Number(document.getElementById('squadSize').value));
   draftEl.hidden = true;
-  document.getElementById('help').hidden = false;
+  document.getElementById('help').hidden = lsGet('pf_help') === '0';
 });
 document.getElementById('again').addEventListener('click', function () { if (NET.mode === 'online') backToLobby(); else showDraft(); });
 
@@ -324,7 +438,7 @@ function frame(now) {
   var raw = Math.min(0.05, (now - last) / 1000); last = now;
   fpsAcc += raw; fpsN++;
   if (fpsAcc > 0.5) { document.getElementById('fps').textContent = Math.round(fpsN / fpsAcc) + ' fps'; fpsAcc = 0; fpsN = 0; }
-  if (NET.mode === 'local' && G && !opts.pause && draftEl.hidden && ordersModal.hidden && swapModal.hidden) {
+  if (NET.mode === 'local' && G && !opts.pause && draftEl.hidden && ordersModal.hidden && swapModal.hidden && menuEl.hidden) {
     if (G.player && mouse.inside) G.player.aimPt = { x: mouse.wx, y: mouse.wy };
     var dt = raw * opts.speed, steps = Math.ceil(dt / 0.034);
     for (var i = 0; i < steps; i++) update(dt / steps);

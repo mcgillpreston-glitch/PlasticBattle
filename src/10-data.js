@@ -134,7 +134,8 @@ var LANE_DEF = [
 /* extra walkable pieces: the fort yards, so heroes can move about their base */
 var FIELD_EXTRA = [
   { ax: 380, ay: 1360, bx: 760, by: 1720, r: 250 }, { ax: 3050, ay: 250, bx: 3600, by: 440, r: 240 },
-  { ax: 900, ay: 1480, bx: 1300, by: 1450, r: 170 }, { ax: 3060, ay: 440, bx: 3230, by: 500, r: 120 }
+  { ax: 900, ay: 1480, bx: 1300, by: 1450, r: 170 }, { ax: 3060, ay: 440, bx: 3230, by: 500, r: 120 },
+  { ax: 1060, ay: 520, bx: 1270, by: 1270, r: 90 }   // the rut between the left tower ring and the centre hill, joining the top and mid lanes
 ];
 var LANES = LANE_DEF.map(function (d, li) {
   var pts = d.pts.map(function (p) { return { x: p[0], y: p[1], r: p[2] }; }), cum = [0];
@@ -222,14 +223,22 @@ function laneOf(u) { return u.lane != null ? u.lane : nearestLane(u); }
 function fountain(team) { return FOUNT[team]; }
 function progress(u) { var t = laneProj(u, laneOf(u)).t; return u.team === 0 ? t : 1 - t; }
 
-/* Structures: each lane has an outer and an inner sand turret per team, set just off the lane edge; each fort's keep is the HQ. */
+/* Turrets: three per lane per team (outer, middle, inner), each a pillbox. Where the painting has a sand tower or a sandbag gun nest near the
+   slot, the turret sits inside that emplacement (painted: true, so only the gun, flag and damage are drawn over it); elsewhere a pillbox is drawn. */
+var PAINTED_NESTS = [
+  { team: 0, x: 960, y: 440, kind: 'nest' }, { team: 0, x: 770, y: 880, kind: 'tower' }, { team: 0, x: 1370, y: 1140, kind: 'nest' }, { team: 0, x: 1700, y: 1870, kind: 'tower' },
+  { team: 1, x: 2350, y: 145, kind: 'tower' }, { team: 1, x: 2100, y: 1180, kind: 'tower' }, { team: 1, x: 2870, y: 730, kind: 'nest' }, { team: 1, x: 3010, y: 1330, kind: 'nest' }
+];
 var STRUCT_DEF = [];
 LANES.forEach(function (L) {
-  [[0, 0.37, 1], [0, 0.2, 2], [1, 0.63, 1], [1, 0.8, 2]].forEach(function (d) {
-    var side = L.name === 'top' ? 1 : L.name === 'bot' ? -1 : (d[2] === 1 ? 1 : -1);
+  [[0, 0.42, 1], [0, 0.3, 2], [0, 0.17, 3], [1, 0.58, 1], [1, 0.7, 2], [1, 0.83, 3]].forEach(function (d) {
+    var side = L.name === 'top' ? 1 : L.name === 'bot' ? -1 : (d[2] % 2 ? 1 : -1);
     var q = lanePt(d[1], 0, L.i), q2 = lanePt(d[1] + 0.002, 0, L.i), dx = q2.x - q.x, dy = q2.y - q.y, len = vlen(dx, dy) || 1;
     var r = 0; L.pts.forEach(function (p, i) { if (L.cum[i] <= d[1] * L.len) r = p.r; });
-    STRUCT_DEF.push({ team: d[0], lane: L.i, kind: 'outpost', order: d[2], x: Math.round(q.x - dy / len * side * (r + 34)), y: Math.round(q.y + dx / len * side * (r + 34)), t: d[1] });
+    var x = Math.round(q.x - dy / len * side * (r + 64)), y = Math.round(q.y + dx / len * side * (r + 64)), painted = null;
+    PAINTED_NESTS.forEach(function (n) { if (n.team === d[0] && !n.used && vlen(n.x - q.x, n.y - q.y) < 300 && (!painted || vlen(n.x - q.x, n.y - q.y) < vlen(painted.x - q.x, painted.y - q.y))) painted = n; });
+    if (painted) { painted.used = true; x = painted.x; y = painted.y; }
+    STRUCT_DEF.push({ team: d[0], lane: L.i, kind: 'outpost', order: d[2], x: x, y: y, t: d[1], painted: painted ? painted.kind : null });
   });
 });
 STRUCT_DEF.push({ team: 0, lane: -1, kind: 'hq', order: 4, x: 500, y: 1440, t: 0 });
