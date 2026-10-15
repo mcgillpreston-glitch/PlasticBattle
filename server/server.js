@@ -279,6 +279,11 @@ function onGameCmd(p, m) {
       break;
     }
     case 'orders': if (C.ordersOwed(u) > 0 && C.atBase(u) && !u.offer) C.rollOffer(u); break;
+    case 'swap': {
+      const i = num(m.hero, 0, HERO_COUNT - 1); if (i == null) return;
+      if (C.swapHero(u, i)) { const r = p.room.roster.find(x => x.uid === u.id); if (r) r.hero = i; }
+      break;
+    }
     case 'pick': {
       const i = num(m.i, 0, 2); if (i == null || !u.offer || C.ordersOwed(u) <= 0 || !C.atBase(u)) return;
       const c = u.offer.cards[i]; if (!c) return;

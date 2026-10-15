@@ -192,7 +192,8 @@ window.addEventListener('keydown', function (e) {
   else if (k === ' ') { cam.lock = true; e.preventDefault(); }
   else if (k === 'Y') { cam.lock = !cam.lock; showToast(cam.lock ? 'Camera locked' : 'Camera free', 1); }
   else if (k === 'O') { if (ordersModal.hidden) openOrders(); else ordersModal.hidden = true; }
-  else if (k === 'ESCAPE') { aimSlot = null; aMovePending = false; refreshAim(); ordersModal.hidden = true; }
+  else if (k === 'C') { if (swapModal.hidden) openSwap(); else swapModal.hidden = true; }
+  else if (k === 'ESCAPE') { aimSlot = null; aMovePending = false; refreshAim(); ordersModal.hidden = true; swapModal.hidden = true; }
   else if (k === '`') { var d = document.getElementById('dev'); d.open = !d.open; }
 });
 document.getElementById('ordersBtn').addEventListener('click', openOrders);
@@ -257,12 +258,41 @@ function renderOrders() {
 }
 document.getElementById('oClose').addEventListener('click', function () { ordersModal.hidden = true; });
 
+/* ---------------- Reassignment (change figure while reinforcing) ---------------- */
+function openSwap() {
+  var u = G && G.player; if (!u || !u.dead || G.over || u.respawn < 1) { if (u && !u.dead) showToast('You can change figure while reinforcing', 1.6); return; }
+  ordersModal.hidden = true; closeSB();
+  var grid = document.getElementById('swapGrid'); grid.innerHTML = '';
+  var taken = {}; G.units.forEach(function (h) { if (h.kind === 'hero' && h.team === u.team && h !== u) taken[h.spec.key] = h; });
+  HEROES.forEach(function (h, i) {
+    var b = document.createElement('button'); b.type = 'button';
+    var im = document.createElement('img'); im.alt = ''; im.src = portrait(h.key, u.team); b.appendChild(im);
+    var nm = document.createElement('span'); nm.textContent = h.name; b.appendChild(nm);
+    var role = document.createElement('span'); role.className = 'role'; role.textContent = taken[h.key] ? 'IN SQUAD' : h.role; b.appendChild(role);
+    if (h === u.spec) { b.classList.add('cur'); b.disabled = true; role.textContent = 'CURRENT'; }
+    else if (taken[h.key]) b.disabled = true;
+    b.addEventListener('click', function () { pickSwap(i); });
+    grid.appendChild(b);
+  });
+  document.getElementById('swapCur').textContent = 'Now: ' + u.name + ' \u00b7 level ' + u.lvl;
+  document.getElementById('swapTimer').textContent = Math.ceil(u.respawn) + 'S';
+  swapModal.hidden = false;
+}
+function pickSwap(i) {
+  var u = G && G.player; if (!u || !u.dead) { swapModal.hidden = true; return; }
+  if (NET.mode === 'local') { if (swapHero(u, i)) presentLocal(); else showToast('That figure is not available', 1.5); }
+  else netSend({ t: 'swap', hero: i });
+  swapModal.hidden = true;
+}
+document.getElementById('swapBtn').addEventListener('click', openSwap);
+document.getElementById('swapClose').addEventListener('click', function () { swapModal.hidden = true; });
+
 /* ---------------- Roll call ---------------- */
 var draft = { idx: 3, shakes: 1 };
 var draftEl = document.getElementById('draft');
 function showDraft() {
   draft.idx = Math.floor(Math.random() * HEROES.length); draft.shakes = 1;
-  document.getElementById('endModal').hidden = true; ordersModal.hidden = true; closeSB();
+  document.getElementById('endModal').hidden = true; ordersModal.hidden = true; swapModal.hidden = true; closeSB();
   draftEl.hidden = false; setTab(false); renderDraft();
 }
 function renderDraft() {
@@ -294,7 +324,7 @@ function frame(now) {
   var raw = Math.min(0.05, (now - last) / 1000); last = now;
   fpsAcc += raw; fpsN++;
   if (fpsAcc > 0.5) { document.getElementById('fps').textContent = Math.round(fpsN / fpsAcc) + ' fps'; fpsAcc = 0; fpsN = 0; }
-  if (NET.mode === 'local' && G && !opts.pause && draftEl.hidden && ordersModal.hidden) {
+  if (NET.mode === 'local' && G && !opts.pause && draftEl.hidden && ordersModal.hidden && swapModal.hidden) {
     if (G.player && mouse.inside) G.player.aimPt = { x: mouse.wx, y: mouse.wy };
     var dt = raw * opts.speed, steps = Math.ceil(dt / 0.034);
     for (var i = 0; i < steps; i++) update(dt / steps);
