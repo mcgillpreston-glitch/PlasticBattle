@@ -10,7 +10,10 @@
     "test": "node build.js && node tests/playtest-harness.js \"$PWD/index.html\" \"$PWD/tests/out\" 240 2",
     "test:online": "node build.js && node tests/online-test.js",
     "visual": "node build.js && node tests/visual-check.js \"$PWD/index.html\" \"$PWD/tests/out\"",
-    "test:death": "node build.js && node tests/death-check.js \"$PWD/index.html\" \"$PWD/tests/out\""
+    "test:death": "node build.js && node tests/death-check.js \"$PWD/index.html\" \"$PWD/tests/out\"",
+    "test:worker": "node build.js && node tests/worker-test.js",
+    "deploy:cf": "wrangler deploy",
+    "dev:cf": "wrangler dev"
   },
   "devDependencies": {
     "playwright": "^1.48.0"

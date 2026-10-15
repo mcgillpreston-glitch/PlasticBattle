@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Plastic Front: an all-ARAM toy-soldier MOBA playtest on a Normandy sunken road.">
+<meta name="description" content="Plastic Front: an all-ARAM toy-soldier MOBA fought across a backyard sandbox.">
 <style>*,*::before,*::after{box-sizing:border-box}html,body{margin:0;padding:0}[hidden]{display:none!important}</style>
 <title>Plastic Front Playtest</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Oswald:wght@400;500;600;700&family=Share+Tech+Mono&display=swap">
@@ -3188,8 +3188,9 @@ window.__PF = { get G() { return G; }, get NET() { return NET; }, netSend: funct
 /* ===== 70-net.js ===== */
 /* Browser only: online PvP. The server runs the match; this client sends commands and draws server snapshots. */
 var PF_DEFAULT_SERVER = 'wss://plastic-front.onrender.com/ws';   // the deployed game server (see README); players can override it under Server
-var INTERP = 0.1;                // seconds of interpolation delay behind the newest snapshot
-var NETC = { ws: null, cid: null, room: null, snaps: [], cur: null, off: null, myUid: 0, aimT: 0, pingT: 0, ping: 0, inMatch: false, offerKey: '' };
+/* Interpolation delay behind the newest snapshot: 60 ms on a steady connection, growing with measured arrival jitter up to 160 ms. */
+function interpDelay() { return clamp(0.06 + 2.5 * (NETC.jit == null ? 0.016 : NETC.jit), 0.06, 0.16); }
+var NETC = { ws: null, code: null, leaving: false, lastErr: null, cid: null, room: null, snaps: [], cur: null, off: null, myUid: 0, aimT: 0, pingT: 0, ping: 0, inMatch: false, offerKey: '' };
 var KIND = ['hero', 'melee', 'rifle', 'tank', 'jeep', 'mortar'];
 var PKIND = ['shot', 'bullet', 'rocket', 'jack'];
 var SLOTS = ['Q', 'W', 'E', 'R', 'D', 'F'];
@@ -3206,32 +3207,48 @@ function serverUrl() {
 function oStatus(txt) { document.getElementById('oStatus').textContent = txt; }
 function lStatus(txt) { document.getElementById('lStatus').textContent = txt; }
 
-function httpOf(url) { return url.replace(/^ws/, 'http').replace(/\/ws$/, ''); }
+function httpOf(url) { return url.replace(/^ws/, 'http').replace(/\/ws\/?$/, ''); }
 function wakeServer() { var u = serverUrl(); if (!u) return; try { fetch(httpOf(u) + '/health', { mode: 'no-cors', cache: 'no-store' }).catch(function () {}); } catch (e) {} }
-function netConnect(then, attempt) {
+function hostOf(url) { return url.replace(/^wss?:\/\//, '').replace(/\/ws\/?$/, ''); }
+/* Rooms are found or created over HTTP first (free servers may need waking), then one WebSocket is opened to that room. */
+function apiCall(method, path, body, then, attempt) {
   attempt = attempt || 0;
-  if (NETC.ws && NETC.ws.readyState === 1) { then(); return; }
-  if (NETC.ws && NETC.ws.readyState === 0) { NETC.pending = then; return; }
-  var url = serverUrl();
-  if (!url) { oStatus('No game server is set up yet. Deploy the server (see README), then enter its address under Server.'); document.getElementById('oSrv').open = true; return; }
-  var host = url.replace(/^wss?:\/\//, '').replace(/\/ws$/, '');
-  oStatus(attempt ? 'Waking the server at ' + host + '\u2026 (free servers sleep when idle; this can take up to a minute)' : 'Connecting to ' + host + '\u2026');
+  var base = serverUrl();
+  if (!base) { oStatus('No game server is set up yet. Deploy the server (see README), then enter its address under Server.'); document.getElementById('oSrv').open = true; return; }
+  var host = hostOf(base);
+  oStatus(attempt ? 'Waking the server at ' + host + '… (free servers sleep when idle; this can take up to a minute)' : 'Contacting ' + host + '…');
+  var retry = function () {
+    if (attempt < 8) { setTimeout(function () { apiCall(method, path, body, then, attempt + 1); }, 6000); }
+    else oStatus('Could not reach the server at ' + host + '. Check the address under Server, or try again later.');
+  };
+  var req;
+  try { req = fetch(httpOf(base) + path, { method: method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' }); }
+  catch (e) { oStatus('That server address is not valid.'); return; }
+  req.then(function (r) {
+    if (r.status >= 500 && r.status !== 503) { retry(); return; }
+    return r.json().then(function (d) { if (!r.ok) { oStatus(d && d.error ? d.error : 'The server said no (' + r.status + ').'); return; } then(d); }, retry);
+  }, retry);
+}
+function netConnect(code, name, then) {
+  var base = serverUrl(); if (!base) return;
+  if (NETC.ws && NETC.ws.readyState <= 1) { if (NETC.code === code && NETC.ws.readyState === 1) { then && then(); return; } NETC.leaving = true; NETC.ws.close(); }
+  var host = hostOf(base), url = base.replace(/\/?$/, '') + '/' + code + '?name=' + encodeURIComponent(name || '');
+  oStatus('Joining room ' + code + ' at ' + host + '…');
   var ws; try { ws = new WebSocket(url); } catch (e) { oStatus('That server address is not valid.'); return; }
   var opened = false;
-  NETC.ws = ws; NETC.pending = then;
-  ws.onopen = function () { opened = true; oStatus('Connected to ' + host + '.'); var f = NETC.pending; NETC.pending = null; if (f) f(); };
+  NETC.ws = ws; NETC.code = code; NETC.leaving = false;
+  ws.onopen = function () { opened = true; oStatus('Connected to ' + host + '.'); if (then) then(); };
   ws.onmessage = function (m) { var d; try { d = JSON.parse(m.data); } catch (e) { return; } netMsg(d); };
-  ws.onclose = function () {
-    NETC.ws = null;
-    if (!opened) {
-      if (attempt < 8) { wakeServer(); setTimeout(function () { netConnect(then, attempt + 1); }, 6000); oStatus('Waking the server at ' + host + '\u2026 (free servers sleep when idle; this can take up to a minute)'); }
-      else oStatus('Could not reach the server at ' + host + '. Check the address under Server, or try again later.');
-      return;
-    }
+  ws.onclose = function (ev) {
+    if (NETC.ws !== ws) return;
+    NETC.ws = null; NETC.code = null;
+    var leaving = NETC.leaving; NETC.leaving = false;
+    if (!opened) { oStatus(ev && ev.code === 4000 && ev.reason ? ev.reason : 'Could not join room ' + code + ' at ' + host + '. It may have closed; try again.'); return; }
     var was = NETC.inMatch || NETC.room;
     NETC.room = null; NETC.cid = null;
-    if (NETC.inMatch) { NETC.inMatch = false; if (G) G.over = true; showToast('Connection to the server was lost', 4); }
-    if (was) { openOnline(); oStatus('Disconnected from the server.'); }
+    if (NETC.inMatch) { NETC.inMatch = false; if (G) G.over = true; if (!leaving) showToast('Connection to the server was lost', 4); }
+    if (was || leaving) { openOnline(); oStatus(leaving ? 'Left the room.' : (NETC.lastErr || 'Disconnected from the server.')); }
+    NETC.lastErr = null;
   };
 }
 function netSend(o) { if (NETC.ws && NETC.ws.readyState === 1) NETC.ws.send(JSON.stringify(o)); }
@@ -3239,7 +3256,7 @@ function netSend(o) { if (NETC.ws && NETC.ws.readyState === 1) NETC.ws.send(JSON
 function netMsg(m) {
   switch (m.t) {
     case 'hello': NETC.cid = m.cid; break;
-    case 'err': if (NETC.inMatch) showToast(m.msg, 2.5); else if (!document.getElementById('lobbyPanel').hidden) lStatus(m.msg); else oStatus(m.msg); break;
+    case 'err': NETC.lastErr = m.msg; if (NETC.inMatch) showToast(m.msg, 2.5); else if (!document.getElementById('lobbyPanel').hidden) lStatus(m.msg); else oStatus(m.msg); break;
     case 'room': NETC.room = m; if (!NETC.inMatch) showLobby(); break;
     case 'start': netStart(m); break;
     case 's': netSnap(m); break;
@@ -3263,7 +3280,7 @@ function netStart(m) {
   m.roster.forEach(function (r) { var u = mirrorHero(r, r.uid === m.you); G.units.push(u); NET.byId[u.id] = u; });
   G.player = NET.byId[m.you];
   rebuildBlockers();
-  NETC.snaps = []; NETC.cur = null; NETC.off = null;
+  NETC.snaps = []; NETC.cur = null; NETC.off = null; NETC.jit = null; NETC.lastArr = null;
   ordersModal.hidden = true; swapModal.hidden = true; closeSB(); document.getElementById('endModal').hidden = true;
   draftEl.hidden = true; document.getElementById('help').hidden = false;
   enterMatch();
@@ -3284,6 +3301,8 @@ function mirrorMinion(a) {
 }
 function netSnap(S) {
   var now = performance.now() / 1000, est = S.tm - now;
+  if (NETC.lastArr != null && NETC.inMatch) { var j = Math.min(0.2, Math.abs(now - NETC.lastArr - 0.05)); NETC.jit = NETC.jit == null ? j : NETC.jit * 0.95 + j * 0.05; }
+  NETC.lastArr = now;
   if (NETC.off == null || Math.abs(est - NETC.off) > 0.35) NETC.off = est; else NETC.off += (est - NETC.off) * 0.05;
   S.pu = {}; S.u.forEach(function (a) { S.pu[a[0]] = a; });
   S.pr = {}; (S.r || []).forEach(function (a) { S.pr[a[0]] = a; });
@@ -3293,7 +3312,7 @@ function netSnap(S) {
 function netFrame(raw) {
   NETC.pingT -= raw; if (NETC.pingT <= 0 && NETC.ws) { NETC.pingT = 2; netSend({ t: 'ping', c: performance.now() }); }
   if (!G || !NETC.inMatch) return;
-  var rt = performance.now() / 1000 + (NETC.off || 0) - INTERP;
+  var rt = performance.now() / 1000 + (NETC.off || 0) - interpDelay();
   while (NETC.snaps.length > 8) { NETC.cur = NETC.snaps.shift(); applySnap(NETC.cur); }
   while (NETC.snaps.length && NETC.snaps[0].tm <= rt) { NETC.cur = NETC.snaps.shift(); applySnap(NETC.cur); }
   var A = NETC.cur, B = NETC.snaps[0]; if (!A) return;
@@ -3395,18 +3414,19 @@ document.getElementById('oName').value = lsGet('pf_name') || '';
 document.getElementById('oServer').value = lsGet('pf_server') || serverUrl() || '';
 document.getElementById('oServerSave').addEventListener('click', function () {
   var v = document.getElementById('oServer').value.trim();
-  if (v && !/^wss?:\/\//.test(v)) v = 'wss://' + v.replace(/^https?:\/\//, '').replace(/\/$/, '') + '/ws';
+  if (v && !/^wss?:\/\//.test(v)) v = 'wss://' + v.replace(/^https?:\/\//, '').replace(/\/(ws\/?)?$/, '') + '/ws';
+  v = v.replace(/\/$/, '');
   if (v) lsSet('pf_server', v); else { try { localStorage.removeItem('pf_server'); } catch (e) {} }
   document.getElementById('oServer').value = v || serverUrl();
   if (NETC.ws) NETC.ws.close();
   oStatus(v ? 'Server saved.' : 'Server reset to default.');
 });
-document.getElementById('oQuick').addEventListener('click', function () { audioInit(); var n = myName(); netConnect(function () { netSend({ t: 'quick', name: n }); }); });
-document.getElementById('oCreate').addEventListener('click', function () { audioInit(); var n = myName(), size = Number(document.getElementById('oSize').value); netConnect(function () { netSend({ t: 'create', name: n, size: size }); }); });
+document.getElementById('oQuick').addEventListener('click', function () { audioInit(); var n = myName(); apiCall('POST', '/api/quick', {}, function (d) { netConnect(d.code, n); }); });
+document.getElementById('oCreate').addEventListener('click', function () { audioInit(); var n = myName(), size = Number(document.getElementById('oSize').value); apiCall('POST', '/api/room', { size: size }, function (d) { netConnect(d.code, n); }); });
 document.getElementById('oJoin').addEventListener('click', function () {
   audioInit(); var n = myName(), code = document.getElementById('oCode').value.trim().toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) { oStatus('Room codes are 4 letters.'); return; }
-  netConnect(function () { netSend({ t: 'join', name: n, code: code }); });
+  apiCall('GET', '/api/room/' + code, null, function () { netConnect(code, n); });
 });
 document.getElementById('oCode').addEventListener('keydown', function (e) { if (e.key === 'Enter') document.getElementById('oJoin').click(); });
 
@@ -3451,7 +3471,7 @@ document.getElementById('lReroll').addEventListener('click', function () { netSe
 document.getElementById('lSwitch').addEventListener('click', function () { netSend({ t: 'team' }); });
 document.getElementById('lStart').addEventListener('click', function () { audioInit(); netSend({ t: 'start' }); });
 document.getElementById('lSize').addEventListener('change', function (e) { netSend({ t: 'size', size: Number(e.target.value) }); });
-document.getElementById('lLeave').addEventListener('click', function () { netSend({ t: 'leave' }); NETC.room = null; setTab(true); });
+document.getElementById('lLeave').addEventListener('click', function () { NETC.room = null; if (NETC.ws) { NETC.leaving = true; NETC.ws.close(); } setTab(true); oStatus('Left the room.'); });
 document.getElementById('lCopy').addEventListener('click', function () {
   var R = NETC.room; if (!R) return;
   var link = location.origin + location.pathname + '?room=' + R.code + (lsGet('pf_server') ? '&server=' + encodeURIComponent(lsGet('pf_server')) : '');

@@ -1,0 +1,29 @@
+# Plastic Front on Cloudflare Workers: static site + one Durable Object per room.
+# Deploy:  npx wrangler deploy       (runs `node build.js` first, see [build])
+# Local:   npx wrangler dev
+name = "plastic-front"
+main = "worker/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[build]
+command = "node build.js"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "RoomDO"
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "LobbyDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomDO", "LobbyDO"]
+
+[observability]
+enabled = true
