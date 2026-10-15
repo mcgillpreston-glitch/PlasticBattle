@@ -103,6 +103,14 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
   check('death recap arrives over the network with killer, sources and countdown', dth.dead && dth.shown && dth.thermal > 0.9 && /ELIMINATED BY/.test(dth.killer) && dth.rows.length >= 2 && dth.rows.some(r => /KILLING BLOW/.test(r)) && dth.rows.some(r => /Frag/.test(r)) && dth.rows.some(r => /SAND TURRET/.test(r)) && +dth.count > 0 && +dth.total > 200, dth);
   check('the other player keeps a normal view', !dthA.shown && dthA.thermal === 0 && !dthA.dead, dthA);
   await B.screenshot({ path: out + '-death.png' });
+  // Reassignment: while reinforcing, Bravo picks a different figure; the server applies it and everyone sees the new name
+  const bBefore = await B.evaluate(() => window.__PF.G.player.name);
+  await B.click('#swapBtn'); await B.waitForTimeout(200);
+  const grid = await B.evaluate(() => ({ open: !document.getElementById('swapModal').hidden, n: document.querySelectorAll('#swapGrid button:not(:disabled)').length }));
+  await B.click('#swapGrid button:not(:disabled)'); await sleep(800);
+  const bAfter = await B.evaluate(() => ({ name: window.__PF.G.player.name, abil: document.querySelector('#abil .ab .n').textContent, closed: document.getElementById('swapModal').hidden }));
+  const onA = await A.evaluate((id) => { const u = window.__PF.G.units.find(x => x.id === id); return u ? u.name : null; }, b.me.id);
+  check('a reinforcing player can change figure, and the other client sees it', grid.open && grid.n > 0 && bAfter.name !== bBefore && bAfter.closed && onA === bAfter.name, { bBefore, grid, bAfter, onA });
 
   // Disconnect: Bravo leaves, a bot takes over
   await B.close(); await sleep(2500);
@@ -128,7 +136,7 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
   const status = await (await fetch(URL + 'status')).json();
   check('server status endpoint', status.rooms === 1 && status.players === 2, status);
   check('no page errors', errors.length === 0, errors.slice(0, 5));
-  check('no server errors', !/error/i.test(srvLog), srvLog.slice(-400));
+  check('no server errors', !/error/i.test(srvLog), srvLog.slice(-1600));
 
 
   // Fog of war: the server must not send an enemy hiding in a thicket unless one of your units is close

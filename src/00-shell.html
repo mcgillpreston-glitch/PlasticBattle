@@ -66,6 +66,9 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 /* death recap: shown while reinforcing, over the thermal feed */
 #death { top: 96px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100% - 20px)); pointer-events: none; }
 #death, #death * { pointer-events: none !important; }
+#death button { pointer-events: auto !important; }
+#swapBtn { width: 100%; margin-top: 8px; font-size: 10px; min-height: 30px; padding: 4px 6px; }
+#swapBtn:disabled { opacity: 0.45; cursor: default; }
 #death .dpanel { display: flex; flex-direction: column; border-top-color: var(--red); border-top-width: 3px; animation: deathIn 0.35s ease-out both; }
 @keyframes deathIn { from { opacity: 0; transform: translateY(-14px) scale(0.98); } to { opacity: 1; transform: none; } }
 .dhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 12px 6px; background: var(--metal3); border-bottom: 1px solid var(--bevelHi); }
@@ -167,6 +170,14 @@ h1 { font-size: 36px; } h2 { font-size: 26px; }
 .pickGrid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
 .pickGrid button { background: var(--metal2); color: var(--text); border-top: 2px solid var(--bevelHi); border-left: 2px solid var(--bevelHi); border-right: 2px solid var(--bevelLo); border-bottom: 2px solid var(--bevelLo); padding: 6px 2px; font-family: var(--mono); font-size: 11px; text-transform: uppercase; cursor: pointer; line-height: 1.1; min-height: 44px; }
 .pickGrid button.on { box-shadow: inset 0 0 0 2px var(--amber); color: var(--amber2); }
+.swapGrid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+.swapGrid button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px 6px; background: var(--metal2); color: var(--text); border-top: 2px solid var(--bevelHi); border-left: 2px solid var(--bevelHi); border-right: 2px solid var(--bevelLo); border-bottom: 2px solid var(--bevelLo); cursor: pointer; font-family: var(--mono); font-size: 11px; text-transform: uppercase; line-height: 1.1; min-height: 44px; }
+.swapGrid button img { width: 56px; height: 68px; object-fit: contain; background: var(--metal3); border: 1px solid var(--bevelLo); }
+.swapGrid button .role { font-size: 9px; letter-spacing: 1px; color: var(--amber2); }
+.swapGrid button:hover:not(:disabled) { background: #40464D; }
+.swapGrid button:disabled { opacity: 0.35; cursor: default; }
+.swapGrid button.cur { box-shadow: inset 0 0 0 2px var(--amber); }
+@media (max-width: 760px) { .swapGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .big { min-height: 48px; padding: 0 22px; font-family: var(--display); font-size: 16px; letter-spacing: 1px; cursor: pointer; color: var(--text); background: var(--metal2); border-top: 2px solid var(--bevelHi); border-left: 2px solid var(--bevelHi); border-right: 2px solid var(--bevelLo); border-bottom: 2px solid var(--bevelLo); }
 .big.go { background: var(--red); color: #fff; }
@@ -294,6 +305,7 @@ body.online .cheat { display: none !important; }
           <span id="dCount" class="led big">0</span>
           <span class="dring"><i id="dRing"></i></span>
           <span id="dHint" class="dhint"></span>
+          <button type="button" id="swapBtn" class="ra-btn">CHANGE FIGURE (C)</button>
         </div>
       </div>
       <div class="dfoot"><span><span class="rec">&#9679; REC</span> THERMAL FEED</span><span>SPECTATING &middot; DRAG TO LOOK AROUND</span></div>
@@ -431,6 +443,24 @@ body.online .cheat { display: none !important; }
       <div class="actions" style="justify-content:space-between">
         <span class="muted" id="oHeld">Orders held: none</span>
         <button type="button" class="btn" id="oClose">Back to the line</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="swapModal" class="overlay" hidden role="dialog" aria-label="Reassignment">
+    <div class="card plate" style="width:min(900px,100%)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="eyebrow">Reassignment &middot; while reinforcing</div>
+          <h2>Return as a different figure</h2>
+        </div>
+        <div class="led" id="swapTimer" style="font-size:26px"></div>
+      </div>
+      <p class="muted" style="margin:0;font-family:var(--type);font-size:14px" id="swapNote">Level, XP, Field Orders and your record carry over. The new kit starts fresh. Figures already in your squad are greyed out.</p>
+      <div class="swapGrid" id="swapGrid"></div>
+      <div class="actions" style="justify-content:space-between">
+        <span class="muted" id="swapCur"></span>
+        <button type="button" class="btn" id="swapClose">Keep this figure</button>
       </div>
     </div>
   </div>

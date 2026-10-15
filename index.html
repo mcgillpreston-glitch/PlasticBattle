@@ -73,6 +73,9 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 /* death recap: shown while reinforcing, over the thermal feed */
 #death { top: 96px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100% - 20px)); pointer-events: none; }
 #death, #death * { pointer-events: none !important; }
+#death button { pointer-events: auto !important; }
+#swapBtn { width: 100%; margin-top: 8px; font-size: 10px; min-height: 30px; padding: 4px 6px; }
+#swapBtn:disabled { opacity: 0.45; cursor: default; }
 #death .dpanel { display: flex; flex-direction: column; border-top-color: var(--red); border-top-width: 3px; animation: deathIn 0.35s ease-out both; }
 @keyframes deathIn { from { opacity: 0; transform: translateY(-14px) scale(0.98); } to { opacity: 1; transform: none; } }
 .dhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 12px 6px; background: var(--metal3); border-bottom: 1px solid var(--bevelHi); }
@@ -174,6 +177,14 @@ h1 { font-size: 36px; } h2 { font-size: 26px; }
 .pickGrid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
 .pickGrid button { background: var(--metal2); color: var(--text); border-top: 2px solid var(--bevelHi); border-left: 2px solid var(--bevelHi); border-right: 2px solid var(--bevelLo); border-bottom: 2px solid var(--bevelLo); padding: 6px 2px; font-family: var(--mono); font-size: 11px; text-transform: uppercase; cursor: pointer; line-height: 1.1; min-height: 44px; }
 .pickGrid button.on { box-shadow: inset 0 0 0 2px var(--amber); color: var(--amber2); }
+.swapGrid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+.swapGrid button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px 6px; background: var(--metal2); color: var(--text); border-top: 2px solid var(--bevelHi); border-left: 2px solid var(--bevelHi); border-right: 2px solid var(--bevelLo); border-bottom: 2px solid var(--bevelLo); cursor: pointer; font-family: var(--mono); font-size: 11px; text-transform: uppercase; line-height: 1.1; min-height: 44px; }
+.swapGrid button img { width: 56px; height: 68px; object-fit: contain; background: var(--metal3); border: 1px solid var(--bevelLo); }
+.swapGrid button .role { font-size: 9px; letter-spacing: 1px; color: var(--amber2); }
+.swapGrid button:hover:not(:disabled) { background: #40464D; }
+.swapGrid button:disabled { opacity: 0.35; cursor: default; }
+.swapGrid button.cur { box-shadow: inset 0 0 0 2px var(--amber); }
+@media (max-width: 760px) { .swapGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .big { min-height: 48px; padding: 0 22px; font-family: var(--display); font-size: 16px; letter-spacing: 1px; cursor: pointer; color: var(--text); background: var(--metal2); border-top: 2px solid var(--bevelHi); border-left: 2px solid var(--bevelHi); border-right: 2px solid var(--bevelLo); border-bottom: 2px solid var(--bevelLo); }
 .big.go { background: var(--red); color: #fff; }
@@ -302,6 +313,7 @@ body.online .cheat { display: none !important; }
           <span id="dCount" class="led big">0</span>
           <span class="dring"><i id="dRing"></i></span>
           <span id="dHint" class="dhint"></span>
+          <button type="button" id="swapBtn" class="ra-btn">CHANGE FIGURE (C)</button>
         </div>
       </div>
       <div class="dfoot"><span><span class="rec">&#9679; REC</span> THERMAL FEED</span><span>SPECTATING &middot; DRAG TO LOOK AROUND</span></div>
@@ -439,6 +451,24 @@ body.online .cheat { display: none !important; }
       <div class="actions" style="justify-content:space-between">
         <span class="muted" id="oHeld">Orders held: none</span>
         <button type="button" class="btn" id="oClose">Back to the line</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="swapModal" class="overlay" hidden role="dialog" aria-label="Reassignment">
+    <div class="card plate" style="width:min(900px,100%)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="eyebrow">Reassignment &middot; while reinforcing</div>
+          <h2>Return as a different figure</h2>
+        </div>
+        <div class="led" id="swapTimer" style="font-size:26px"></div>
+      </div>
+      <p class="muted" style="margin:0;font-family:var(--type);font-size:14px" id="swapNote">Level, XP, Field Orders and your record carry over. The new kit starts fresh. Figures already in your squad are greyed out.</p>
+      <div class="swapGrid" id="swapGrid"></div>
+      <div class="actions" style="justify-content:space-between">
+        <span class="muted" id="swapCur"></span>
+        <button type="button" class="btn" id="swapClose">Keep this figure</button>
       </div>
     </div>
   </div>
@@ -1212,6 +1242,25 @@ function dmgRecap(tgt) {
   var kb = L[L.length - 1];
   return { win: Math.round((G.time - t0) * 10) / 10, tot: Math.round(total), kb: [kb[0], kb[4]],
     rows: order.slice(0, 6).map(function (g) { return [g.id, g.kc, g.label, g.team, Math.round(g.amt), g.hits, Object.keys(g.w).sort(function (a, b) { return g.w[b] - g.w[a]; }).map(function (w) { return [w, Math.round(g.w[w])]; })]; }) };
+}
+/* While reinforcing, a hero may come back as a different figure. Level, XP, Field Orders and stats carry over; the kit resets. */
+function canSwapTo(u, idx) {
+  if (!u || u.kind !== 'hero' || !u.dead || G.over) return false;
+  var spec = HEROES[idx]; if (!spec || spec === u.spec) return false;
+  for (var i = 0; i < G.units.length; i++) { var o = G.units[i]; if (o !== u && o.kind === 'hero' && o.team === u.team && o.spec === spec) return false; }
+  return true;
+}
+function swapHero(u, idx) {
+  if (!canSwapTo(u, idx)) return false;
+  var spec = HEROES[idx], was = nm(u);
+  u.spec = spec; u.pose = spec.key; u.name = spec.name;
+  u.cd = { Q: 0, W: 0, E: 0, R: 0, D: 0, F: 0 }; u.cdMax = { Q: 1, W: 1, E: 1, R: 1, D: 1, F: 1 };
+  u.buffs = []; u.shield = 0; u.tagMark = null; u.dash = null; u.cone = null; u.chan = null; u.target = null; u.move = null; u.amove = null; u.wind = null; u.aimPt = null;
+  u._mh = u._rng = u._acd = null; u.swaps = (u.swaps || 0) + 1;
+  u.hp = maxHp(u);
+  feed(was + ' will return as the ' + spec.name, u.team === 0 ? 'fg' : 'ft');
+  emit('swap', u.id, idx);
+  return true;
 }
 function giveXp(h, n) {
   h.xp += n;
@@ -2635,6 +2684,11 @@ function present(e) {
       u.stagT = 0.14; u.stagDir = e[2];
       if (isMe(e[3]) && !u._hidden) { var ap = aimPoint(u); addFx({ k: 'hitmark', x: ap.x, y: ap.y, t: 0, dur: 0.18 }); }
       break;
+    case 'swap':
+      u = unitById(e[1]); var ns = HEROES[e[2]]; if (!u || !ns) break;
+      if (NET.mode === 'online') { u.spec = ns; u.pose = ns.key; u.name = ns.name; u.cd = { Q: 0, W: 0, E: 0, R: 0, D: 0, F: 0 }; u.cdMax = { Q: 1, W: 1, E: 1, R: 1, D: 1, F: 1 }; u.buffs = []; u._mh = ns.hp; u._rng = ns.range; u._acd = ns.acd; }
+      if (isMe(e[1])) { buildAbilityBar(); showAlert('REASSIGNED \u00b7 RETURNING AS ' + ns.name.toUpperCase(), 'good'); playSfx('ui'); if (!swapModal.hidden) swapModal.hidden = true; }
+      break;
     case 'end': showEnd(e[1]); break;
   }
 }
@@ -2682,7 +2736,8 @@ function visUnit(u, dt) {
 }
 
 /* Death recap: who hurt you, with what, how much; respawn countdown; thermal feed while reinforcing */
-var DEATH = { el: document.getElementById('death'), count: document.getElementById('dCount'), ring: document.getElementById('dRing'), hint: document.getElementById('dHint') };
+var DEATH = { el: document.getElementById('death'), count: document.getElementById('dCount'), ring: document.getElementById('dRing'), hint: document.getElementById('dHint'), swap: document.getElementById('swapBtn') };
+var swapModal = document.getElementById('swapModal');
 var WPN_NAME = { carbine: 'M4 carbine', dmr: 'DMR', sniper: 'Sniper rifle', launcher: 'Rocket launcher', gl: 'Grenade launcher', radio: 'Sidearm', flame: 'Flamethrower', detector: 'Sidearm', mortar: 'Mortar', pistol: 'Pistol', lmg: 'LMG', breacher: 'Breacher', shotgun: 'Shotgun', smg: 'SMG' };
 function weaponLabel(w, kc, src, label) {
   if (w !== 'aa') return w;
@@ -2726,7 +2781,7 @@ function showDeath(secs, killer, recap) {
 function updateDeath(dt) {
   var p = G.player, dead = !!(p && p.dead && !G.over);
   G.thermal = clamp((G.thermal || 0) + (dead ? dt / 0.7 : -dt / 0.3), 0, 1);
-  if (!dead) { if (G.death) { G.death = null; DEATH.el.hidden = true; cam.lock = true; } return; }
+  if (!dead) { if (G.death) { G.death = null; DEATH.el.hidden = true; cam.lock = true; swapModal.hidden = true; } return; }
   if (!G.death) showDeath(Math.ceil(p.respawn), null, null);
   var left = Math.max(0, p.respawn || 0);
   DEATH.count.textContent = Math.ceil(left);
@@ -2734,6 +2789,8 @@ function updateDeath(dt) {
   var owed = ordersOwed(p);
   DEATH.hint.textContent = owed > 0 ? 'FIELD ORDERS READY · PRESS O' : '';
   DEATH.hint.classList.toggle('on', owed > 0);
+  DEATH.swap.disabled = left < 1;
+  if (!swapModal.hidden) { document.getElementById('swapTimer').textContent = Math.ceil(left) + 'S'; if (left < 1) swapModal.hidden = true; }
 }
 
 /* Red Alert style EVA alerts: short, queued, flashing */
@@ -2954,7 +3011,8 @@ window.addEventListener('keydown', function (e) {
   else if (k === ' ') { cam.lock = true; e.preventDefault(); }
   else if (k === 'Y') { cam.lock = !cam.lock; showToast(cam.lock ? 'Camera locked' : 'Camera free', 1); }
   else if (k === 'O') { if (ordersModal.hidden) openOrders(); else ordersModal.hidden = true; }
-  else if (k === 'ESCAPE') { aimSlot = null; aMovePending = false; refreshAim(); ordersModal.hidden = true; }
+  else if (k === 'C') { if (swapModal.hidden) openSwap(); else swapModal.hidden = true; }
+  else if (k === 'ESCAPE') { aimSlot = null; aMovePending = false; refreshAim(); ordersModal.hidden = true; swapModal.hidden = true; }
   else if (k === '`') { var d = document.getElementById('dev'); d.open = !d.open; }
 });
 document.getElementById('ordersBtn').addEventListener('click', openOrders);
@@ -3019,12 +3077,41 @@ function renderOrders() {
 }
 document.getElementById('oClose').addEventListener('click', function () { ordersModal.hidden = true; });
 
+/* ---------------- Reassignment (change figure while reinforcing) ---------------- */
+function openSwap() {
+  var u = G && G.player; if (!u || !u.dead || G.over || u.respawn < 1) { if (u && !u.dead) showToast('You can change figure while reinforcing', 1.6); return; }
+  ordersModal.hidden = true; closeSB();
+  var grid = document.getElementById('swapGrid'); grid.innerHTML = '';
+  var taken = {}; G.units.forEach(function (h) { if (h.kind === 'hero' && h.team === u.team && h !== u) taken[h.spec.key] = h; });
+  HEROES.forEach(function (h, i) {
+    var b = document.createElement('button'); b.type = 'button';
+    var im = document.createElement('img'); im.alt = ''; im.src = portrait(h.key, u.team); b.appendChild(im);
+    var nm = document.createElement('span'); nm.textContent = h.name; b.appendChild(nm);
+    var role = document.createElement('span'); role.className = 'role'; role.textContent = taken[h.key] ? 'IN SQUAD' : h.role; b.appendChild(role);
+    if (h === u.spec) { b.classList.add('cur'); b.disabled = true; role.textContent = 'CURRENT'; }
+    else if (taken[h.key]) b.disabled = true;
+    b.addEventListener('click', function () { pickSwap(i); });
+    grid.appendChild(b);
+  });
+  document.getElementById('swapCur').textContent = 'Now: ' + u.name + ' \u00b7 level ' + u.lvl;
+  document.getElementById('swapTimer').textContent = Math.ceil(u.respawn) + 'S';
+  swapModal.hidden = false;
+}
+function pickSwap(i) {
+  var u = G && G.player; if (!u || !u.dead) { swapModal.hidden = true; return; }
+  if (NET.mode === 'local') { if (swapHero(u, i)) presentLocal(); else showToast('That figure is not available', 1.5); }
+  else netSend({ t: 'swap', hero: i });
+  swapModal.hidden = true;
+}
+document.getElementById('swapBtn').addEventListener('click', openSwap);
+document.getElementById('swapClose').addEventListener('click', function () { swapModal.hidden = true; });
+
 /* ---------------- Roll call ---------------- */
 var draft = { idx: 3, shakes: 1 };
 var draftEl = document.getElementById('draft');
 function showDraft() {
   draft.idx = Math.floor(Math.random() * HEROES.length); draft.shakes = 1;
-  document.getElementById('endModal').hidden = true; ordersModal.hidden = true; closeSB();
+  document.getElementById('endModal').hidden = true; ordersModal.hidden = true; swapModal.hidden = true; closeSB();
   draftEl.hidden = false; setTab(false); renderDraft();
 }
 function renderDraft() {
@@ -3056,7 +3143,7 @@ function frame(now) {
   var raw = Math.min(0.05, (now - last) / 1000); last = now;
   fpsAcc += raw; fpsN++;
   if (fpsAcc > 0.5) { document.getElementById('fps').textContent = Math.round(fpsN / fpsAcc) + ' fps'; fpsAcc = 0; fpsN = 0; }
-  if (NET.mode === 'local' && G && !opts.pause && draftEl.hidden && ordersModal.hidden) {
+  if (NET.mode === 'local' && G && !opts.pause && draftEl.hidden && ordersModal.hidden && swapModal.hidden) {
     if (G.player && mouse.inside) G.player.aimPt = { x: mouse.wx, y: mouse.wy };
     var dt = raw * opts.speed, steps = Math.ceil(dt / 0.034);
     for (var i = 0; i < steps; i++) update(dt / steps);
@@ -3177,7 +3264,7 @@ function netStart(m) {
   G.player = NET.byId[m.you];
   rebuildBlockers();
   NETC.snaps = []; NETC.cur = null; NETC.off = null;
-  ordersModal.hidden = true; closeSB(); document.getElementById('endModal').hidden = true;
+  ordersModal.hidden = true; swapModal.hidden = true; closeSB(); document.getElementById('endModal').hidden = true;
   draftEl.hidden = true; document.getElementById('help').hidden = false;
   enterMatch();
   showAlert('DEPLOYED WITH ' + (MYTEAM === 0 ? 'GREEN' : 'TAN') + ' ARMY · FIELD ORDERS AT BASE FROM LEVEL 3', 'info');

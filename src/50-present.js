@@ -94,6 +94,11 @@ function present(e) {
       u.stagT = 0.14; u.stagDir = e[2];
       if (isMe(e[3]) && !u._hidden) { var ap = aimPoint(u); addFx({ k: 'hitmark', x: ap.x, y: ap.y, t: 0, dur: 0.18 }); }
       break;
+    case 'swap':
+      u = unitById(e[1]); var ns = HEROES[e[2]]; if (!u || !ns) break;
+      if (NET.mode === 'online') { u.spec = ns; u.pose = ns.key; u.name = ns.name; u.cd = { Q: 0, W: 0, E: 0, R: 0, D: 0, F: 0 }; u.cdMax = { Q: 1, W: 1, E: 1, R: 1, D: 1, F: 1 }; u.buffs = []; u._mh = ns.hp; u._rng = ns.range; u._acd = ns.acd; }
+      if (isMe(e[1])) { buildAbilityBar(); showAlert('REASSIGNED \u00b7 RETURNING AS ' + ns.name.toUpperCase(), 'good'); playSfx('ui'); if (!swapModal.hidden) swapModal.hidden = true; }
+      break;
     case 'end': showEnd(e[1]); break;
   }
 }
@@ -141,7 +146,8 @@ function visUnit(u, dt) {
 }
 
 /* Death recap: who hurt you, with what, how much; respawn countdown; thermal feed while reinforcing */
-var DEATH = { el: document.getElementById('death'), count: document.getElementById('dCount'), ring: document.getElementById('dRing'), hint: document.getElementById('dHint') };
+var DEATH = { el: document.getElementById('death'), count: document.getElementById('dCount'), ring: document.getElementById('dRing'), hint: document.getElementById('dHint'), swap: document.getElementById('swapBtn') };
+var swapModal = document.getElementById('swapModal');
 var WPN_NAME = { carbine: 'M4 carbine', dmr: 'DMR', sniper: 'Sniper rifle', launcher: 'Rocket launcher', gl: 'Grenade launcher', radio: 'Sidearm', flame: 'Flamethrower', detector: 'Sidearm', mortar: 'Mortar', pistol: 'Pistol', lmg: 'LMG', breacher: 'Breacher', shotgun: 'Shotgun', smg: 'SMG' };
 function weaponLabel(w, kc, src, label) {
   if (w !== 'aa') return w;
@@ -185,7 +191,7 @@ function showDeath(secs, killer, recap) {
 function updateDeath(dt) {
   var p = G.player, dead = !!(p && p.dead && !G.over);
   G.thermal = clamp((G.thermal || 0) + (dead ? dt / 0.7 : -dt / 0.3), 0, 1);
-  if (!dead) { if (G.death) { G.death = null; DEATH.el.hidden = true; cam.lock = true; } return; }
+  if (!dead) { if (G.death) { G.death = null; DEATH.el.hidden = true; cam.lock = true; swapModal.hidden = true; } return; }
   if (!G.death) showDeath(Math.ceil(p.respawn), null, null);
   var left = Math.max(0, p.respawn || 0);
   DEATH.count.textContent = Math.ceil(left);
@@ -193,6 +199,8 @@ function updateDeath(dt) {
   var owed = ordersOwed(p);
   DEATH.hint.textContent = owed > 0 ? 'FIELD ORDERS READY · PRESS O' : '';
   DEATH.hint.classList.toggle('on', owed > 0);
+  DEATH.swap.disabled = left < 1;
+  if (!swapModal.hidden) { document.getElementById('swapTimer').textContent = Math.ceil(left) + 'S'; if (left < 1) swapModal.hidden = true; }
 }
 
 /* Red Alert style EVA alerts: short, queued, flashing */

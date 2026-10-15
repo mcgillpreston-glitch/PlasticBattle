@@ -28,10 +28,18 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
   // thermal pixel sample: the centre of the screen should be cold (blue/purple) or hot (yellow/white), never backyard green
   const px = await p.evaluate(() => { const c = document.getElementById('game'), x = c.getContext('2d'); const d = x.getImageData(Math.round(c.width * 0.5), Math.round(c.height * 0.7), 1, 1).data; return [d[0], d[1], d[2]]; });
   console.log('centre pixel', px, 'green-dominant:', px[1] > px[0] && px[1] > px[2]);
+  // change figure while reinforcing: open the reassignment screen from the death panel, pick the first available figure
+  const before = await p.evaluate(() => window.__PF.G.player.name);
+  await p.click('#swapBtn'); await p.waitForTimeout(150);
+  const grid = await p.evaluate(() => ({ open: !document.getElementById('swapModal').hidden, buttons: document.querySelectorAll('#swapGrid button').length, disabled: document.querySelectorAll('#swapGrid button:disabled').length, timer: document.getElementById('swapTimer').textContent }));
+  await p.screenshot({ path: process.argv[3] + '-swap.png' });
+  await p.click('#swapGrid button:not(:disabled)'); await p.waitForTimeout(150);
+  const swapped = await p.evaluate(() => { const G = window.__PF.G, u = G.player; return { name: u.name, pose: u.pose, dead: u.dead, lvl: u.lvl, closed: document.getElementById('swapModal').hidden, abil: document.querySelector('#abil .ab .n').textContent, feed: G.feed[0] && G.feed[0].txt }; });
+  console.log('swap', JSON.stringify({ before, grid, swapped }));
   // wait for the respawn, then make sure everything is restored
   for (let i = 0; i < 120; i++) { const alive = await p.evaluate(() => !window.__PF.G.player.dead); if (alive) break; await p.waitForTimeout(250); }
   await p.waitForTimeout(600);
-  const after = await p.evaluate(() => ({ dead: window.__PF.G.player.dead, thermal: window.__PF.G.thermal, panelHidden: document.getElementById('death').hidden, death: window.__PF.G.death }));
+  const after = await p.evaluate(() => ({ dead: window.__PF.G.player.dead, thermal: window.__PF.G.thermal, panelHidden: document.getElementById('death').hidden, death: window.__PF.G.death, name: window.__PF.G.player.name, hp: Math.round(window.__PF.G.player.hp), maxHp: window.__PF.maxHp ? window.__PF.maxHp(window.__PF.G.player) : null }));
   console.log('after respawn', JSON.stringify(after));
   await p.screenshot({ path: process.argv[3] + '-respawn.png' });
   // thermal frame cost
@@ -39,5 +47,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
   console.log('thermal draw ms/frame', cost.toFixed(2));
   console.log('errors:', errs.length ? errs : 'none');
   await b.close();
-  process.exit(st.panelShown && st.rows.length > 0 && st.thermal > 0.9 && after.panelHidden && !after.dead && errs.length === 0 ? 0 : 1);
+  const swapOk = grid.open && grid.buttons === 16 && swapped.name !== before && swapped.closed && after.name === swapped.name && !after.dead;
+  console.log('swap ok:', swapOk);
+  process.exit(st.panelShown && st.rows.length > 0 && st.thermal > 0.9 && after.panelHidden && !after.dead && swapOk && errs.length === 0 ? 0 : 1);
 })().catch(e => { console.error(e); process.exit(1); });

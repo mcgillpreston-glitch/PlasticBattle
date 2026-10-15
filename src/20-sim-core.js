@@ -222,6 +222,25 @@ function dmgRecap(tgt) {
   return { win: Math.round((G.time - t0) * 10) / 10, tot: Math.round(total), kb: [kb[0], kb[4]],
     rows: order.slice(0, 6).map(function (g) { return [g.id, g.kc, g.label, g.team, Math.round(g.amt), g.hits, Object.keys(g.w).sort(function (a, b) { return g.w[b] - g.w[a]; }).map(function (w) { return [w, Math.round(g.w[w])]; })]; }) };
 }
+/* While reinforcing, a hero may come back as a different figure. Level, XP, Field Orders and stats carry over; the kit resets. */
+function canSwapTo(u, idx) {
+  if (!u || u.kind !== 'hero' || !u.dead || G.over) return false;
+  var spec = HEROES[idx]; if (!spec || spec === u.spec) return false;
+  for (var i = 0; i < G.units.length; i++) { var o = G.units[i]; if (o !== u && o.kind === 'hero' && o.team === u.team && o.spec === spec) return false; }
+  return true;
+}
+function swapHero(u, idx) {
+  if (!canSwapTo(u, idx)) return false;
+  var spec = HEROES[idx], was = nm(u);
+  u.spec = spec; u.pose = spec.key; u.name = spec.name;
+  u.cd = { Q: 0, W: 0, E: 0, R: 0, D: 0, F: 0 }; u.cdMax = { Q: 1, W: 1, E: 1, R: 1, D: 1, F: 1 };
+  u.buffs = []; u.shield = 0; u.tagMark = null; u.dash = null; u.cone = null; u.chan = null; u.target = null; u.move = null; u.amove = null; u.wind = null; u.aimPt = null;
+  u._mh = u._rng = u._acd = null; u.swaps = (u.swaps || 0) + 1;
+  u.hp = maxHp(u);
+  feed(was + ' will return as the ' + spec.name, u.team === 0 ? 'fg' : 'ft');
+  emit('swap', u.id, idx);
+  return true;
+}
 function giveXp(h, n) {
   h.xp += n;
   while (h.lvl < 18 && h.xp >= xpNeed(h.lvl)) {
