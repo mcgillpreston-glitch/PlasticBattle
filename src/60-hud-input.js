@@ -304,7 +304,10 @@ function frame(now) {
   } else if (NET.mode === 'online') netFrame(raw);
   updateVisuals(raw);
   if (G && G.player) {
-    if (cam.lock) { var tgt = G.player.dead ? fountain(MYTEAM) : G.player, k = Math.min(1, raw * 14); cam.x += (tgt.x - cam.x) * k; cam.y += (tgt.y - cam.y) * k; }
+    if (cam.lock) {
+      var dead = G.player.dead, tgt = dead ? (G.death && G.player.respawn > 1.6 ? G.death : fountain(MYTEAM)) : G.player, k = Math.min(1, raw * (dead ? 3.5 : 14));
+      cam.x += (tgt.x - cam.x) * k; cam.y += (tgt.y - cam.y) * k;
+    }
     var mw = s2w(mouse.x, mouse.y); mouse.wx = mw.x; mouse.wy = mw.y;
     hudT -= raw; if (hudT <= 0) { hudT = 0.1; hud(); }
   }
@@ -320,4 +323,4 @@ function start() {
 }
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(start, start); else start();
 
-window.__PF = { get G() { return G; }, get NET() { return NET; }, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, LLEN: LLEN, MAP: MAP, LANG: LANG, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG };
+window.__PF = { get G() { return G; }, get NET() { return NET; }, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, LLEN: LLEN, MAP: MAP, LANG: LANG, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG };

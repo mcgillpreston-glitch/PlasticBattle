@@ -63,6 +63,42 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 #feed .ft { border-left-color: var(--tanHi); }
 #toast { top: 90px; left: 0; right: 0; text-align: center; font-family: var(--mono); font-size: 14px; color: var(--amber2); text-shadow: 0 1px 0 #000; pointer-events: none; }
 
+/* death recap: shown while reinforcing, over the thermal feed */
+#death { top: 96px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100% - 20px)); pointer-events: none; }
+#death, #death * { pointer-events: none !important; }
+#death .dpanel { display: flex; flex-direction: column; border-top-color: var(--red); border-top-width: 3px; animation: deathIn 0.35s ease-out both; }
+@keyframes deathIn { from { opacity: 0; transform: translateY(-14px) scale(0.98); } to { opacity: 1; transform: none; } }
+.dhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 12px 6px; background: var(--metal3); border-bottom: 1px solid var(--bevelHi); }
+.dhead .dtitle { font-family: var(--display); font-size: 22px; letter-spacing: 3px; color: var(--redHi); text-shadow: 0 0 10px rgba(255,59,59,0.6), 0 2px 0 #000; }
+.dhead .dk { font-family: var(--mono); font-size: 12px; letter-spacing: 1px; color: var(--text); text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dhead .dk b { color: var(--amber2); font-weight: 400; }
+.dbody { display: grid; grid-template-columns: 1fr 150px; gap: 0; }
+.drecap { padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.dsub { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--mono); font-size: 11px; letter-spacing: 2px; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 3px; }
+.dsub .led { font-size: 16px; }
+.drow { display: grid; grid-template-columns: 30px 1fr 56px; grid-template-rows: auto auto; column-gap: 8px; align-items: center; font-family: var(--mono); font-size: 12px; }
+.drow img { grid-row: 1 / 3; width: 30px; height: 36px; object-fit: cover; background: var(--metal3); border: 1px solid var(--bevelLo); }
+.drow .ico { grid-row: 1 / 3; width: 30px; height: 36px; display: flex; align-items: center; justify-content: center; background: var(--metal3); border: 1px solid var(--bevelLo); color: var(--muted); font-size: 14px; }
+.drow .nm { color: var(--text); letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drow .nm.foe { color: #FFD6D2; } .drow .nm.ally { color: #CFF5D3; }
+.drow .nm .kb { margin-left: 6px; font-size: 9px; letter-spacing: 1px; padding: 0 4px; background: var(--red); color: #fff; vertical-align: 1px; }
+.drow .wp { grid-column: 2; font-size: 10.5px; color: var(--muted); letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drow .amt { grid-row: 1; grid-column: 3; text-align: right; font-size: 15px; }
+.drow .bar { grid-row: 2; grid-column: 3; height: 5px; background: #000; overflow: hidden; }
+.drow .bar i { display: block; height: 100%; background: var(--redHi); }
+.drow .bar i.ally { background: var(--greenHi); } .drow .bar i.env { background: #6FB7FF; }
+.dnone { font-family: var(--mono); font-size: 12px; color: var(--muted); padding: 8px 0; }
+.dtimer { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 10px 10px; background: var(--metal3); border-left: 2px solid var(--bevelLo); box-shadow: inset 1px 0 0 var(--bevelHi); text-align: center; }
+.dtimer .dlbl { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; color: var(--muted); }
+.dtimer .led.big { font-size: 54px; line-height: 1; color: var(--amber); }
+.dring { display: block; width: 100%; height: 6px; background: #000; margin-top: 4px; overflow: hidden; border: 1px solid var(--bevelLo); }
+.dring i { display: block; height: 100%; width: 100%; background: var(--amber); box-shadow: 0 0 8px rgba(255,176,0,0.7); transition: width 0.12s linear; }
+.dhint { font-family: var(--display); font-size: 10px; letter-spacing: 1px; color: var(--redHi); margin-top: 6px; min-height: 12px; }
+.dhint.on { animation: evaBlink 1s steps(2, end) infinite; }
+.dfoot { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; letter-spacing: 2px; color: var(--muted); padding: 4px 12px; border-top: 1px solid var(--bevelLo); box-shadow: inset 0 1px 0 var(--bevelHi); }
+.dfoot .rec { color: var(--redHi); animation: evaBlink 1s steps(2, end) infinite; }
+@media (prefers-reduced-motion: reduce) { #death .dpanel, .dfoot .rec, .dhint.on { animation: none; } }
+
 /* bottom command bar */
 #bar { bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: stretch; gap: 10px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); max-width: calc(100% - 20px); background-image: linear-gradient(rgba(255,255,255,0.04), rgba(0,0,0,0.18)), repeating-linear-gradient(90deg, transparent 0 6px, rgba(255,255,255,0.015) 6px 7px); }
 #portrait { width: 64px; flex: none; position: relative; background: var(--metal3); border-top: 2px solid var(--bevelLo); border-left: 2px solid var(--bevelLo); border-right: 2px solid var(--bevelHi); border-bottom: 2px solid var(--bevelHi); }
@@ -225,6 +261,7 @@ body.online .cheat { display: none !important; }
   #mini { width: 150px; height: 93px; }
   #dev { width: 200px; }
   #alert { font-size: 15px; }
+  #death { top: 60px; } .dbody { grid-template-columns: 1fr 104px; } .dtimer .led.big { font-size: 38px; } .dfoot span:last-child { display: none; }
   .pickGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .orders { grid-template-columns: 1fr; }
   h1 { font-size: 28px; }
@@ -244,6 +281,24 @@ body.online .cheat { display: none !important; }
   <div id="alert" class="hud" hidden aria-live="polite"></div>
   <div id="feed" class="hud"></div>
   <div id="toast" class="hud"></div>
+  <div id="death" class="hud" hidden aria-live="polite">
+    <div class="plate dpanel">
+      <div class="dhead"><span class="dtitle">KIA</span><span id="dKiller" class="dk"></span></div>
+      <div class="dbody">
+        <div class="drecap">
+          <div class="dsub"><span>DAMAGE TAKEN <span id="dWin"></span></span><span id="dTotal" class="led">0</span></div>
+          <div id="dRows"></div>
+        </div>
+        <div class="dtimer">
+          <span class="dlbl">REINFORCING IN</span>
+          <span id="dCount" class="led big">0</span>
+          <span class="dring"><i id="dRing"></i></span>
+          <span id="dHint" class="dhint"></span>
+        </div>
+      </div>
+      <div class="dfoot"><span><span class="rec">&#9679; REC</span> THERMAL FEED</span><span>SPECTATING &middot; DRAG TO LOOK AROUND</span></div>
+    </div>
+  </div>
 
   <div id="bar" class="hud plate">
     <div id="portrait"><canvas id="portraitCv" width="128" height="152"></canvas><span id="lvl">3</span></div>

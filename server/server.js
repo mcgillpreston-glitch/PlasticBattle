@@ -257,6 +257,14 @@ function onGameCmd(p, m) {
     case 'aim': { const x = num(m.x, -1000, 5000), y = num(m.y, -1000, 4000); if (x != null && y != null) u.aimPt = { x, y }; break; }
     case 'halt': u.move = null; u.target = null; u.amove = null; break;
     case 'dbg_win': if (process.env.PF_DEBUG === '1') G.structs.filter(s => s.team !== u.team).sort((a, b) => a.order - b.order).forEach(s => C.kill(u, s)); break;
+    case 'dbg_die': {
+      // test only: an enemy hero and a turret hit this player hard enough to kill them, so the death recap can be checked end to end
+      if (process.env.PF_DEBUG !== '1' || u.dead) return;
+      const foe = G.units.find(x => x.kind === 'hero' && x.team !== u.team && !x.dead), tur = G.structs.find(s => s.team !== u.team && s.kind === 'outpost' && !s.dead);
+      if (tur) C.damage(tur, u, 120, {});
+      if (foe) { C.damage(foe, u, 90, { ability: 1, n: 'Frag' }); C.damage(foe, u, 1e6, { aa: 1 }); }
+      break;
+    }
     case 'orders': if (C.ordersOwed(u) > 0 && C.atBase(u) && !u.offer) C.rollOffer(u); break;
     case 'pick': {
       const i = num(m.i, 0, 2); if (i == null || !u.offer || C.ordersOwed(u) <= 0 || !C.atBase(u)) return;

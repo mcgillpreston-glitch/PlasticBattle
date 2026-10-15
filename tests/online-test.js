@@ -95,6 +95,15 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
   const namesOnA = await A.evaluate(() => window.__PF.G.units.filter(u => u.pname).map(u => u.pname));
   check('everyone sees the new player name', namesOnA.includes('Charlie'), namesOnA);
 
+  // Death: the server kills Bravo; the recap, countdown and thermal feed must appear on Bravo's screen only
+  await B.evaluate(() => window.__PF.netSend({ t: 'dbg_die' }));
+  await B.waitForFunction(() => !document.getElementById('death').hidden && window.__PF.G.thermal > 0.9, null, { timeout: 6000 }).catch(() => {});
+  const dth = await B.evaluate(() => { const G = window.__PF.G; return { dead: G.player.dead, respawn: G.player.respawn, thermal: G.thermal, shown: !document.getElementById('death').hidden, killer: document.getElementById('dKiller').textContent, total: document.getElementById('dTotal').textContent, count: document.getElementById('dCount').textContent, rows: [...document.querySelectorAll('#dRows .drow')].map(r => r.querySelector('.nm').textContent + ' | ' + r.querySelector('.wp').textContent) }; });
+  const dthA = await A.evaluate(() => ({ shown: !document.getElementById('death').hidden, thermal: window.__PF.G.thermal, dead: window.__PF.G.player.dead }));
+  check('death recap arrives over the network with killer, sources and countdown', dth.dead && dth.shown && dth.thermal > 0.9 && /ELIMINATED BY/.test(dth.killer) && dth.rows.length >= 2 && dth.rows.some(r => /KILLING BLOW/.test(r)) && dth.rows.some(r => /Frag/.test(r)) && dth.rows.some(r => /SAND TURRET/.test(r)) && +dth.count > 0 && +dth.total > 200, dth);
+  check('the other player keeps a normal view', !dthA.shown && dthA.thermal === 0 && !dthA.dead, dthA);
+  await B.screenshot({ path: out + '-death.png' });
+
   // Disconnect: Bravo leaves, a bot takes over
   await B.close(); await sleep(2500);
   a = await st(A);

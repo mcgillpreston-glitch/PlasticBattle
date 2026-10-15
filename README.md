@@ -49,6 +49,7 @@ The GitHub Pages site is static, so online play needs the small Node server in `
 - **Map:** The Sandbox. Each side has two sand turrets, a supply bucket and a fort (Green's sandcastle, Tan's overturned bucket bunker), and they must fall in that order. Weeds growing through the sand hide units, first-aid tins heal, and sandcastle walls, a toy dump truck, a shovel and buckets give cover.
 - **Reserves:** a minion wave every 25 s, a tank every third wave, and a jeep once the enemy supply dump is down.
 - **Heroes:** 16, one for each classic army-men pose. Each has Q/W/E/R, plus D (Tag Round, then press again to close in) and F (Hit the Deck).
+- **Going down:** when your soldier is eliminated the screen switches to a thermal feed (cold blue sandbox, white-hot soldiers, shots and blasts) and a KIA recap shows who hit you in the last 12 seconds, with what, for how much, who landed the killing blow, and the reinforcement countdown. The camera holds on the spot where you fell, you can drag to look around, and it swings back to base just before you respawn. Field Orders can still be issued while reinforcing.
 - **Field Orders:** augments at levels 3, 7, 11 and 15, in Squad, Platoon and Company tiers, issued at your CP or while reinforcing.
 - **Overtime:** the lawn sprinkler comes on after 18:00 and sweeps out from the centre; anything caught in the water takes damage.
 
@@ -90,10 +91,11 @@ server/sim.js              loads the shared sim into an isolated context per mat
 tests/playtest-harness.js  obstacle course + bot-match stuck detector (offline)
 tests/online-test.js       end-to-end online test with three live browser players
 tests/visual-check.js      combat and scoreboard screenshots
+tests/death-check.js       death recap, countdown and thermal feed (offline)
 render.yaml, Dockerfile    server deployment
 ```
 
-The sim never touches the page. It emits events (shots, hits, callouts, feed lines), and the browser turns them into effects, whether the events came from the local sim or from the server.
+The sim never touches the page. It emits events (shots, hits, callouts, feed lines, the death recap), and the browser turns them into effects, whether the events came from the local sim or from the server.
 
 Edit files in `src/`, then run `node build.js`. Pushing to `main` redeploys GitHub Pages, and redeploys the server if Render auto-deploy is on.
 
@@ -104,6 +106,7 @@ npm install
 npm run dev            # build, then serve on http://localhost:8080 (online play works locally)
 npx playwright install chromium
 npm test               # offline: obstacle course for 3 unit sizes + bot matches with a stuck detector
-npm run test:online    # online: create and join a room, start, move, cast, scoreboard, drop-in, leave, end, rematch
+npm run test:online    # online: create and join a room, start, move, cast, scoreboard, death recap, drop-in, leave, end, rematch
 npm run visual         # screenshots of a live fight and the Tab scoreboard
+npm run test:death     # the player dies to real damage: recap rows, countdown, thermal view, respawn restores the normal view
 ```

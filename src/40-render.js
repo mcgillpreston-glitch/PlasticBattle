@@ -88,13 +88,23 @@ function buildTerrain() {
   return T;
 }
 
+function camXf(shx, shy) { ctx.translate(viewCX() + shx, VH / 2 + shy); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y); }
 function draw() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = '#5A8F3C'; ctx.fillRect(0, 0, VW, VH);
   if (!G) return;
-  ctx.save();
   var shx = G.shake > 0 ? (Math.random() - 0.5) * G.shake * 2 : 0, shy = G.shake > 0 ? (Math.random() - 0.5) * G.shake * 2 : 0;
-  ctx.translate(viewCX() + shx, VH / 2 + shy); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y);
+  var therm = G.thermal || 0;
+  if (therm < 1) drawScene(shx, shy);
+  if (therm > 0) thermalPass(therm, shx, shy);
+  drawOverlays(shx, shy);
+  postProcess();
+  drawMini();
+}
+/* The world: terrain, props, structures, units, shots and effects. Draws through whatever `ctx` currently is (the screen, or the small thermal canvas). */
+function drawScene(shx, shy) {
+  ctx.save();
+  camXf(shx, shy);
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(terrain, TERR.ox, TERR.oy, TERR.w, TERR.h);
   [0, 1].forEach(function (t) { var fp = fountain(t); ctx.fillStyle = t === MYTEAM ? 'rgba(91,214,107,0.12)' : 'rgba(240,69,58,0.12)'; ell(ctx, fp.x, fp.y, 330, 330); ctx.fill(); });
@@ -156,6 +166,12 @@ function draw() {
   });
   if (G.barrage) G.barrage.beams.forEach(function (b) { if (b.x == null) return; var r = G.barrage.r; ctx.fillStyle = 'rgba(90,160,230,0.22)'; ell(ctx, b.x, b.y, r, r * 0.65); ctx.fill(); ctx.strokeStyle = 'rgba(190,225,255,0.85)'; ctx.lineWidth = 3; ctx.setLineDash([6, 10]); ell(ctx, b.x, b.y, r, r * 0.65); ctx.stroke(); ctx.setLineDash([]); for (var q = 0; q < 10; q++) { var qa = G.time * 3 + q * 0.63, qf = (G.time * 0.9 + q * 0.1) % 1, qr = r * (0.3 + 0.7 * qf); ctx.fillStyle = 'rgba(200,235,255,0.8)'; ell(ctx, b.x + Math.cos(qa) * qr, b.y + Math.sin(qa) * qr * 0.65 - 20 - 30 * Math.sin(qf * Math.PI), 3, 5); ctx.fill(); } });
   G.fx.forEach(function (f) { if (f.k !== 'scorch' && f.k !== 'glow' && f.k !== 'castring' && f.k !== 'callout') drawFx(f); });
+  ctx.restore();
+}
+/* Nameplates, health bars, target brackets, callouts and damage numbers: always crisp, drawn over the scene or the thermal feed. */
+function drawOverlays(shx, shy) {
+  ctx.save();
+  camXf(shx, shy);
   G.structs.forEach(function (s) { if (!s.dead) bar(s.x, s.y - (s.kind === 'hq' ? 178 : s.kind === 'depot' ? 100 : 116), s.kind === 'hq' ? 150 : 110, 9, s.hp / s.maxHp, s.team, targetable(s) ? null : 'locked'); });
   G.units.forEach(function (u) {
     if (u.dead || !visibleTo(u, MYTEAM)) return;
@@ -173,18 +189,105 @@ function draw() {
   G.fx.forEach(function (f) { if (f.k === 'callout') drawFx(f); });
   G.texts.forEach(function (t) { var pop = t.t < 0.1 ? 1.5 - t.t * 5 : 1; ctx.save(); ctx.translate(t.x, t.y); ctx.scale(pop, pop); ctx.globalAlpha = t.t < 0.6 ? 1 : 1 - (t.t - 0.6) / 0.3; ctx.font = '400 ' + (t.big ? 24 : 17) + 'px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(t.txt, 0, 0); ctx.fillStyle = t.color; ctx.fillText(t.txt, 0, 0); ctx.restore(); ctx.globalAlpha = 1; });
   ctx.restore();
-  postProcess();
-  drawMini();
+}
+/* Thermal feed while reinforcing: the scene is downsampled, heat is painted onto bodies, shots and blasts, and every pixel is mapped through an ironbow palette (cold blue to white-hot). */
+var THERM = { cv: null, x: null, lut: null, scan: null, seed: 1 };
+function thermLut() {
+  var stops = [[0, 2, 0, 12], [0.14, 14, 0, 58], [0.3, 76, 0, 138], [0.44, 158, 12, 118], [0.57, 212, 44, 40], [0.7, 246, 124, 18], [0.84, 255, 206, 48], [1, 255, 255, 255]];
+  var L = new Uint8ClampedArray(256 * 3);
+  for (var i = 0; i < 256; i++) {
+    var v = i / 255, j = 1; while (j < stops.length - 1 && stops[j][0] < v) j++;
+    var a = stops[j - 1], b = stops[j], f = clamp((v - a[0]) / (b[0] - a[0]), 0, 1);
+    L[i * 3] = a[1] + (b[1] - a[1]) * f; L[i * 3 + 1] = a[2] + (b[2] - a[2]) * f; L[i * 3 + 2] = a[3] + (b[3] - a[3]) * f;
+  }
+  return L;
+}
+function thermalPass(amt, shx, shy) {
+  var T = THERM;
+  if (!T.lut) T.lut = thermLut();
+  if (!T.cv) { T.cv = document.createElement('canvas'); T.x = T.cv.getContext('2d', { willReadFrequently: true }); }
+  var sw = cv.width, sh = cv.height, s = Math.min(0.5, Math.sqrt(150000 / Math.max(1, sw * sh)));
+  var tw = Math.max(16, Math.round(sw * s)), th = Math.max(16, Math.round(sh * s)), k = tw / VW;
+  if (T.cv.width !== tw || T.cv.height !== th) { T.cv.width = tw; T.cv.height = th; }
+  var main = ctx; ctx = T.x;
+  ctx.setTransform(k, 0, 0, k, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.imageSmoothingEnabled = true;
+  ctx.fillStyle = '#3A5A2A'; ctx.fillRect(0, 0, VW, VH);
+  var _t0 = performance.now();
+  drawScene(shx, shy);
+  if (T.prof) T.prof.scene = performance.now() - _t0;
+  ctx.setTransform(k, 0, 0, k, 0, 0);
+  ctx.fillStyle = 'rgba(0,0,0,0.52)'; ctx.fillRect(0, 0, VW, VH);
+  var x = ctx, z = cam.z;
+  function blob(wx, wy, rx, ry, heat, cold) {
+    if (heat <= 0.01) return;
+    var p = w2s(wx, wy); rx = Math.max(1.5 / k, rx * z); ry = Math.max(1.5 / k, ry * z);
+    if (p.x < -rx || p.y < -ry || p.x > VW + rx || p.y > VH + ry) return;
+    x.save(); x.translate(p.x, p.y); x.scale(rx, ry);
+    var g = x.createRadialGradient(0, 0, 0, 0, 0, 1), c = cold ? '0,0,0,' : '255,255,255,';
+    g.addColorStop(0, 'rgba(' + c + heat + ')'); g.addColorStop(0.5, 'rgba(' + c + (heat * 0.55) + ')'); g.addColorStop(1, 'rgba(' + c + '0)');
+    x.fillStyle = g; x.beginPath(); x.arc(0, 0, 1, 0, Math.PI * 2); x.fill(); x.restore();
+  }
+  if (G.barrage) G.barrage.beams.forEach(function (b) { if (b.x != null) blob(b.x, b.y, G.barrage.r, G.barrage.r * 0.65, 0.85, true); });
+  x.globalCompositeOperation = 'lighter';
+  G.structs.forEach(function (st) { if (st.dead) { blob(st.x, st.y - 30, st.r * 1.2, st.r * 0.8, 0.22); return; } blob(st.x, st.y - (st.kind === 'hq' ? 110 : st.kind === 'depot' ? 60 : 80), st.r * 0.8, st.r * 0.6, st.kind === 'depot' ? 0.18 : 0.34); });
+  G.units.forEach(function (u) {
+    if (u.dead ? (u.deathT || 0) > 1.4 : (!visibleTo(u, MYTEAM) || u._hidden)) return;
+    var h = unitH(u), veh = u.type === 'tank' || u.type === 'jeep', heat = u.kind === 'hero' ? 1 : veh ? 0.92 : 0.8;
+    if (u.dead) heat *= clamp(1 - (u.deathT || 0) / 1.4, 0, 1) * 0.9;
+    if (u.dead || veh) { blob(u.x, u.y - h * 0.45, h * (veh ? 0.7 : 0.34), h * 0.5, heat); return; }
+    // white-hot silhouette of the actual sculpt, with a soft bloom around it
+    var sp = sprite(u.pose, u.team, h, u.facing < 0, true), p = w2s(u.x, u.y);
+    x.save(); x.translate(p.x, p.y); x.scale(z, z); x.globalAlpha = heat * 0.95; x.drawImage(sp.cv, -sp.w / 2, -h * 226 / 240, sp.w, h); x.restore(); x.globalAlpha = 1;
+    blob(u.x, u.y - h * 0.45, h * 0.42, h * 0.58, heat * 0.4);
+  });
+  G.rounds.forEach(function (r) { blob(r.x, r.y, 9, 9, 1); });
+  G.proj.forEach(function (p) { blob(p.x, p.y, p.kind === 'rocket' ? 22 : 12, p.kind === 'rocket' ? 22 : 12, 1); });
+  G.fx.forEach(function (f) {
+    var life = clamp(1 - f.t / f.dur, 0, 1);
+    if (f.k === 'boom') blob(f.x, f.y - 10, f.r * (0.6 + 0.6 * (1 - life)), f.r * (0.45 + 0.4 * (1 - life)), life);
+    else if (f.k === 'muzzle') blob(f.x, f.y, 26, 26, life);
+    else if (f.k === 'scorch') blob(f.x, f.y, f.r, f.r * 0.6, 0.35 * life);
+    else if (f.k === 'flame' || f.k === 'cone') blob(f.x, f.y, 40, 30, 0.9 * life);
+    else if (f.k === 'impact') blob(f.x, f.y, 14, 14, 0.8 * life);
+  });
+  x.globalCompositeOperation = 'source-over';
+  ctx = main;
+  if (T.prof) { T.prof.blobs = performance.now() - _t0 - T.prof.scene; _t0 = performance.now(); }
+  var img = x.getImageData(0, 0, tw, th), d = img.data, L = T.lut, n = d.length, seed = T.seed | 0;
+  for (var i = 0; i < n; i += 4) {
+    seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+    var lum = ((d[i] * 77 + d[i + 1] * 151 + d[i + 2] * 28) >> 8) + ((seed & 15) - 7);
+    lum = lum < 0 ? 0 : lum > 255 ? 255 : lum;
+    var j = lum * 3; d[i] = L[j]; d[i + 1] = L[j + 1]; d[i + 2] = L[j + 2];
+  }
+  T.seed = seed || 1;
+  x.putImageData(img, 0, 0);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = amt; ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(T.cv, 0, 0, sw, sh);
+  ctx.globalAlpha = 1; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (T.prof) T.prof.map = performance.now() - _t0;
 }
 function postProcess() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  if (blendOK.overlay) { ctx.globalCompositeOperation = 'overlay'; ctx.fillStyle = 'rgba(255,214,150,0.2)'; ctx.fillRect(0, 0, VW, VH); }
+  var therm = (G && G.thermal) || 0;
+  if (blendOK.overlay && therm < 1) { ctx.globalCompositeOperation = 'overlay'; ctx.fillStyle = 'rgba(255,214,150,' + (0.2 * (1 - therm)) + ')'; ctx.fillRect(0, 0, VW, VH); }
   ctx.globalCompositeOperation = blendOK.overlay ? 'overlay' : 'source-over';
-  ctx.globalAlpha = blendOK.overlay ? 0.07 : 0.03;
+  ctx.globalAlpha = (blendOK.overlay ? 0.07 : 0.03) + therm * 0.1;
   var ox = -Math.floor(Math.random() * 192), oy = -Math.floor(Math.random() * 192);
   ctx.save(); ctx.translate(ox, oy); var gp = ctx.createPattern(grainCv, 'repeat'); ctx.fillStyle = gp; ctx.fillRect(-ox, -oy, VW + 192, VH + 192); ctx.restore();
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   var cx = viewCX(), cy = VH / 2;
+  if (therm > 0) {
+    if (!THERM.scan) { THERM.scan = document.createElement('canvas'); THERM.scan.width = 4; THERM.scan.height = 3; var sc = THERM.scan.getContext('2d'); sc.fillStyle = 'rgba(0,0,0,0.5)'; sc.fillRect(0, 2, 4, 1); }
+    ctx.globalAlpha = therm * 0.7; ctx.fillStyle = ctx.createPattern(THERM.scan, 'repeat'); ctx.fillRect(0, 0, VW, VH);
+    ctx.globalAlpha = therm * (0.02 + Math.random() * 0.03); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, VW, VH);
+    ctx.globalAlpha = 1;
+    var tg = ctx.createRadialGradient(cx, cy, Math.min(VW, VH) * 0.3, cx, cy, Math.max(VW, VH) * 0.72);
+    tg.addColorStop(0, 'rgba(0,0,0,0)'); tg.addColorStop(1, 'rgba(0,0,0,' + (0.55 * therm) + ')');
+    ctx.fillStyle = tg; ctx.fillRect(0, 0, VW, VH);
+    var m = 18, len = 34; ctx.strokeStyle = 'rgba(255,255,255,' + (0.55 * therm) + ')'; ctx.lineWidth = 2;
+    [[m, m, 1, 1], [VW - m, m, -1, 1], [m, VH - m, 1, -1], [VW - m, VH - m, -1, -1]].forEach(function (c) { ctx.beginPath(); ctx.moveTo(c[0], c[1] + c[3] * len); ctx.lineTo(c[0], c[1]); ctx.lineTo(c[0] + c[2] * len, c[1]); ctx.stroke(); });
+  }
   var vg = ctx.createRadialGradient(cx, cy, Math.min(VW, VH) * 0.45, cx, cy, Math.max(VW, VH) * 0.8);
   vg.addColorStop(0, 'rgba(10,12,8,0)'); vg.addColorStop(1, 'rgba(10,12,8,0.42)');
   ctx.fillStyle = vg; ctx.fillRect(0, 0, VW, VH);

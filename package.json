@@ -9,7 +9,8 @@
     "dev": "node build.js && node server/server.js",
     "test": "node build.js && node tests/playtest-harness.js \"$PWD/index.html\" \"$PWD/tests/out\" 240 2",
     "test:online": "node build.js && node tests/online-test.js",
-    "visual": "node build.js && node tests/visual-check.js \"$PWD/index.html\" \"$PWD/tests/out\""
+    "visual": "node build.js && node tests/visual-check.js \"$PWD/index.html\" \"$PWD/tests/out\"",
+    "test:death": "node build.js && node tests/death-check.js \"$PWD/index.html\" \"$PWD/tests/out\""
   },
   "devDependencies": {
     "playwright": "^1.48.0"

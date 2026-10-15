@@ -51,7 +51,7 @@ function addHero(spec, team, isPlayer, slot) {
     target: null, move: null, amove: null, facing: team === 0 ? 1 : -1, slowT: 0, slowAmt: 0, kvx: 0, kvy: 0, aaT: 0, burnT: 0, burnDps: 0,
     dash: null, cone: null, chan: null, tagMark: null, iframe: 0, aggroT: 0, kills: 0, deaths: 0, think: 0, retreat: false, offer: null, deathT: 0,
     walk: 0, movedT: 0, recoilT: 0, flashT: 0, fireT: 0, stagT: 0, lungeT: 0,
-    st: { k: 0, d: 0, a: 0, cs: 0, dmgH: 0, dmgS: 0, taken: 0, heal: 0, mit: 0, pos: 0, streak: 0, best: 0 }, dmgBy: {} };
+    st: { k: 0, d: 0, a: 0, cs: 0, dmgH: 0, dmgS: 0, taken: 0, heal: 0, mit: 0, pos: 0, streak: 0, best: 0 }, dmgBy: {}, dmgLog: [] };
   u.hp = maxHp(u);
   G.units.push(u);
   return u;
@@ -139,7 +139,7 @@ function damage(src, tgt, amt, o) {
   }
   var dealt = Math.min(amt, Math.max(0, tgt.hp));
   if (src && src.kind === 'hero' && src.team !== tgt.team) { if (tgt.kind === 'hero') src.st.dmgH += dealt; else if (tgt.isStruct) src.st.dmgS += dealt; }
-  if (tgt.kind === 'hero') { tgt.st.taken += dealt; if (src && src.kind === 'hero') tgt.dmgBy[src.id] = G.time; }
+  if (tgt.kind === 'hero') { tgt.st.taken += dealt; if (src && src.kind === 'hero') tgt.dmgBy[src.id] = G.time; if (dealt > 0) logDmg(tgt, src, dealt, o); }
   tgt.hp -= amt;
   if (src && src.kind === 'hero') {
     var ls = (o.aa ? sumBuff(src, 'lifesteal') : 0) + (src.aug.lifesteal || 0);
@@ -191,9 +191,36 @@ function kill(src, tgt) {
     G.units.forEach(function (h) { if (h !== killer && h.kind === 'hero' && h.team === killer.team && !h.dead && dist(h, tgt) < 1100) giveXp(h, 90); });
   }
   tgt.dmgBy = {};
+  var recap = dmgRecap(tgt); tgt.dmgLog = [];
   var by = killer && killer.team !== tgt.team ? nm(killer) : (src && src.isStruct ? 'a sand turret' : src && src.kind === 'minion' ? 'the line' : 'the sprinkler');
   feed(by + ' eliminated ' + nm(tgt), tgt.team === 0 ? 'ft' : 'fg');
-  emit('kia', tgt.id, Math.ceil(tgt.respawn), tgt.team, killer && killer.team !== tgt.team ? killer.id : 0);
+  emit('kia', tgt.id, Math.ceil(tgt.respawn), tgt.team, killer && killer.team !== tgt.team ? killer.id : 0, recap);
+}
+/* Rolling log of damage a hero took (last 12 s), for the death recap. Entries: [srcId, kindCode, label, team, weapon, amount, hits, firstT, lastT]. */
+function logDmg(tgt, src, amt, o) {
+  var L = tgt.dmgLog || (tgt.dmgLog = []), now = G.time;
+  var w = o.n || (o.aa || (src && src.isStruct) ? 'aa' : o.tick ? 'Burn' : 'Ability');
+  var id = src ? src.id : 0, kc = !src ? 'e' : src.isStruct ? 's' : src.kind === 'minion' ? 'm' : 'h';
+  var label = !src ? (G.barrage ? 'Sprinkler' : 'Hazard') : src.isStruct ? (src.kind === 'hq' ? 'Fort' : 'Sand turret') : src.kind === 'minion' ? (src.type === 'tank' ? 'Toy tank' : src.type === 'jeep' ? 'Jeep' : 'Reserves') : nm(src);
+  if (kc === 'm') id = -1 - src.team;
+  var last = L[L.length - 1];
+  if (last && last[0] === id && last[4] === w && now - last[8] < 0.6) { last[5] += amt; last[6]++; last[8] = now; }
+  else { L.push([id, kc, label, src ? src.team : -1, w, amt, 1, now, now]); if (L.length > 40) L.splice(0, L.length - 40); }
+}
+function dmgRecap(tgt) {
+  var L = (tgt.dmgLog || []).filter(function (r) { return G.time - r[8] < 12; });
+  if (!L.length) return null;
+  var by = {}, order = [], t0 = Infinity, total = 0;
+  L.forEach(function (r) {
+    var k = String(r[0]), g = by[k];
+    if (!g) { g = by[k] = { id: r[0], kc: r[1], label: r[2], team: r[3], amt: 0, hits: 0, w: {}, last: 0 }; order.push(g); }
+    g.amt += r[5]; g.hits += r[6]; g.w[r[4]] = (g.w[r[4]] || 0) + r[5]; g.last = Math.max(g.last, r[8]);
+    t0 = Math.min(t0, r[7]); total += r[5];
+  });
+  order.sort(function (a, b) { return b.amt - a.amt; });
+  var kb = L[L.length - 1];
+  return { win: Math.round((G.time - t0) * 10) / 10, tot: Math.round(total), kb: [kb[0], kb[4]],
+    rows: order.slice(0, 6).map(function (g) { return [g.id, g.kc, g.label, g.team, Math.round(g.amt), g.hits, Object.keys(g.w).sort(function (a, b) { return g.w[b] - g.w[a]; }).map(function (w) { return [w, Math.round(g.w[w])]; })]; }) };
 }
 function giveXp(h, n) {
   h.xp += n;
@@ -434,14 +461,14 @@ function cast(u, slot, aim) {
   var dm = dmgMul(u), mz = muzzle(u);
   switch (ab.t) {
     case 'proj':
-      G.proj.push({ x: mz.x, y: mz.y, vx: dir.x * ab.speed, vy: dir.y * ab.speed, life: ab.range / ab.speed, team: u.team, owner: u, w: ab.w || 20,
+      G.proj.push({ x: mz.x, y: mz.y, vx: dir.x * ab.speed, vy: dir.y * ab.speed, life: ab.range / ab.speed, team: u.team, owner: u, w: ab.w || 20, n: ab.n,
         dmg: ab.dmg * dm, aoe: ab.aoe || 0, pierce: ab.pierce, slow: ab.slow, knock: ab.knock, pull: ab.pull, exec: ab.exec, burn: ab.burn, rocket: ab.rocket, hit: {}, kind: ab.rocket ? 'rocket' : 'shot' });
       fx({ k: 'muzzle', x: mz.x, y: mz.y, a: Math.atan2(dir.y, dir.x), t: 0, dur: 0.08, s: 1.4 });
       anim(u, 'f');
       sfx(ab.rocket ? 'rocket' : 'rifle', u.x, u.y);
       break;
     case 'jack':
-      G.proj.push({ x: mz.x, y: mz.y, vx: dir.x * ab.speed, vy: dir.y * ab.speed, life: ab.range / ab.speed, team: u.team, owner: u, w: ab.w, dmg: 20, hit: {}, kind: 'jack', heroOnly: 1 });
+      G.proj.push({ x: mz.x, y: mz.y, vx: dir.x * ab.speed, vy: dir.y * ab.speed, life: ab.range / ab.speed, team: u.team, owner: u, w: ab.w, dmg: 20, hit: {}, kind: 'jack', heroOnly: 1, n: ab.n });
       fx({ k: 'muzzle', x: mz.x, y: mz.y, a: Math.atan2(dir.y, dir.x), t: 0, dur: 0.07, s: 1 });
       sfx('rifle', u.x, u.y);
       break;
@@ -452,25 +479,25 @@ function cast(u, slot, aim) {
         if (ab.line) { var k = (i - (n - 1) / 2) * 110; px = tx + dir.x * k; py = ty + dir.y * k; }
         else if (n > 1) { var a = rnd(0, Math.PI * 2), rr = Math.sqrt(Math.random()) * ab.spread; px = tx + Math.cos(a) * rr; py = ty + Math.sin(a) * rr; }
         var c = clampLane({ x: px, y: py });
-        G.lobs.push({ x: c.x, y: c.y, sx: u.x, sy: u.y - 50, t: 0, delay: ab.delay + (ab.line ? i * 0.12 : n > 1 ? i * 0.1 : 0), r: ab.r, dmg: ab.dmg * dm, team: u.team, owner: u, slow: ab.slow, smul: ab.smul, smoke: ab.dmg === 0 });
+        G.lobs.push({ x: c.x, y: c.y, sx: u.x, sy: u.y - 50, t: 0, delay: ab.delay + (ab.line ? i * 0.12 : n > 1 ? i * 0.1 : 0), r: ab.r, dmg: ab.dmg * dm, team: u.team, owner: u, slow: ab.slow, smul: ab.smul, smoke: ab.dmg === 0, n: ab.n });
       }
       sfx('shell', u.x, u.y);
       anim(u, 'f');
       break; }
     case 'nova':
       fx({ k: 'ring', x: u.x, y: u.y, r: ab.r, t: 0, dur: 0.4, c: TEAMC[u.team].hi });
-      enemiesNear(u.team, u, ab.r, true).forEach(function (e) { damage(u, e, ab.dmg * dm, { slow: ab.slow, knock: ab.knock, ability: 1, smul: 0.5 }); });
+      enemiesNear(u.team, u, ab.r, true).forEach(function (e) { damage(u, e, ab.dmg * dm, { slow: ab.slow, knock: ab.knock, ability: 1, smul: 0.5, n: ab.n }); });
       sfx('boom', u.x, u.y);
       break;
     case 'dash': {
       var dd = Math.min(ab.dist, Math.max(L, 80));
       var to = dashCut(u, clampLane({ x: u.x + dir.x * dd, y: u.y + dir.y * dd }));
-      startDash(u, to, 0.18, { dmg: ab.dmg ? ab.dmg * dm : 0, iframe: ab.iframe || 0.15 });
+      startDash(u, to, 0.18, { dmg: ab.dmg ? ab.dmg * dm : 0, iframe: ab.iframe || 0.15, n: ab.n });
       sfx('melee', u.x, u.y);
       break; }
     case 'leap': {
       var ld = Math.min(ab.range, L), lt = clampLane({ x: u.x + dir.x * ld, y: u.y + dir.y * ld });
-      startDash(u, lt, ab.range > 1000 ? 0.9 : 0.4, { land: { r: ab.r, dmg: ab.dmg * dm, slow: ab.slow, exec: ab.exec }, leap: 1, iframe: 0.2 });
+      startDash(u, lt, ab.range > 1000 ? 0.9 : 0.4, { land: { r: ab.r, dmg: ab.dmg * dm, slow: ab.slow, exec: ab.exec }, leap: 1, iframe: 0.2, n: ab.n });
       sfx('cast', u.x, u.y);
       break; }
     case 'shield':
@@ -505,7 +532,7 @@ function cast(u, slot, aim) {
         var md = Math.min(L, ab.range), mx = u.x + dir.x * md, my = u.y + dir.y * md;
         if (mn > 1) { mx += rnd(-ab.spread, ab.spread); my += rnd(-ab.spread, ab.spread); }
         var mc = clampLane({ x: mx, y: my });
-        G.mines.push({ x: mc.x, y: mc.y, team: u.team, owner: u, arm: 0.6, dmg: ab.dmg * dm, r: ab.r, life: 60 });
+        G.mines.push({ x: mc.x, y: mc.y, team: u.team, owner: u, arm: 0.6, dmg: ab.dmg * dm, r: ab.r, life: 60, n: ab.n });
       }
       sfx('cast', u.x, u.y);
       break; }
@@ -524,7 +551,7 @@ function cast(u, slot, aim) {
   return true;
 }
 function startDash(u, to, dur, o) {
-  u.dash = { fx: u.x, fy: u.y, tx: to.x, ty: to.y, t: 0, dur: dur, dmg: o.dmg || 0, land: o.land, leap: o.leap, hit: {} };
+  u.dash = { fx: u.x, fy: u.y, tx: to.x, ty: to.y, t: 0, dur: dur, dmg: o.dmg || 0, land: o.land, leap: o.leap, hit: {}, n: o.n };
   u.iframe = Math.max(u.iframe, o.iframe || 0);
   u.target = null; u.move = null;
   if (Math.abs(to.x - u.x) > 4) u.facing = to.x < u.x ? -1 : 1;
@@ -537,7 +564,7 @@ function coneHit(u, ab, dir, amt) {
     if (d > ab.range + (e.r || 0)) return;
     var da = Math.abs(((Math.atan2(dy, dx) - a0 + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
     if (da > ab.ang / 2 + 0.1) return;
-    damage(u, e, amt, { slow: ab.slow, knock: ab.knock, ability: 1, smul: 0.4, tick: ab.dur > 0.2 });
+    damage(u, e, amt, { slow: ab.slow, knock: ab.knock, ability: 1, smul: 0.4, tick: ab.dur > 0.2, n: ab.n });
   });
 }
 function enemiesNear(team, p, r, incStructs) {
