@@ -10,6 +10,9 @@ on:
 concurrency:
   group: cloudflare-deploy
   cancel-in-progress: false
+permissions:
+  contents: read
+  actions: write
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -24,8 +27,16 @@ jobs:
       - name: Check the worker bundles
         run: npx --yes esbuild@0.24.2 worker/index.js --bundle --format=esm --platform=neutral --outfile=/tmp/worker-check.js && ls -la /tmp/worker-check.js
       - name: Deploy with wrangler
+        id: deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
+      - name: Record the deployment URL (job summary and the PF_WORKER_URL repository variable)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          echo "Deployed to: $URL" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$URL" ]; then gh variable set PF_WORKER_URL --body "$URL" --repo "$GITHUB_REPOSITORY" || true; fi
