@@ -13,7 +13,7 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
   const srv = global.__srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'server.js')], { env: Object.assign({}, process.env, { PORT: String(PORT), PF_DEBUG: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
   let srvLog = ''; srv.stdout.on('data', d => srvLog += d); srv.stderr.on('data', d => srvLog += d);
   await sleep(800);
-  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox'] } : {});
+  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox', '--allow-file-access-from-files'] } : {});
   const errors = []; global.__errors = errors; global.__srvLog = () => srvLog;
   async function client(name) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -58,13 +58,13 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
 
   // Move both players toward mid by clicking the ground ahead of them
   const startA = a.me;
-  await A.mouse.move(900, 250); await A.mouse.click(900, 250);
+  await A.mouse.move(1000, 250); await A.mouse.click(1000, 250);
   await B.mouse.move(200, 600); await B.mouse.click(200, 600);
   await sleep(2500);
   a = await st(A); b = await st(B);
   const movedA = Math.hypot(a.me.x - startA.x, a.me.y - startA.y);
   check('click-to-move is applied by the server and shown on the client', movedA > 150, { movedA: Math.round(movedA) });
-  await A.mouse.move(900, 250); await A.keyboard.press('q'); await sleep(500);
+  await A.mouse.move(1000, 250); await A.keyboard.press('q'); await sleep(500);
   a = await st(A);
   check('ability cast goes through the server (Q on cooldown)', a.me.cdQ > 0, { cdQ: a.me.cdQ });
 
@@ -94,6 +94,15 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
   await sleep(1500);
   const namesOnA = await A.evaluate(() => window.__PF.G.units.filter(u => u.pname).map(u => u.pname));
   check('everyone sees the new player name', namesOnA.includes('Charlie'), namesOnA);
+
+  // Death: the server kills Bravo; the recap, countdown and thermal feed must appear on Bravo's screen only
+  await B.evaluate(() => window.__PF.netSend({ t: 'dbg_die' }));
+  await B.waitForFunction(() => !document.getElementById('death').hidden && window.__PF.G.thermal > 0.9, null, { timeout: 6000 }).catch(() => {});
+  const dth = await B.evaluate(() => { const G = window.__PF.G; return { dead: G.player.dead, respawn: G.player.respawn, thermal: G.thermal, shown: !document.getElementById('death').hidden, killer: document.getElementById('dKiller').textContent, total: document.getElementById('dTotal').textContent, count: document.getElementById('dCount').textContent, rows: [...document.querySelectorAll('#dRows .drow')].map(r => r.querySelector('.nm').textContent + ' | ' + r.querySelector('.wp').textContent) }; });
+  const dthA = await A.evaluate(() => ({ shown: !document.getElementById('death').hidden, thermal: window.__PF.G.thermal, dead: window.__PF.G.player.dead }));
+  check('death recap arrives over the network with killer, sources and countdown', dth.dead && dth.shown && dth.thermal > 0.9 && /ELIMINATED BY/.test(dth.killer) && dth.rows.length >= 2 && dth.rows.some(r => /KILLING BLOW/.test(r)) && dth.rows.some(r => /Frag/.test(r)) && dth.rows.some(r => /SAND TURRET/.test(r)) && +dth.count > 0 && +dth.total > 200, dth);
+  check('the other player keeps a normal view', !dthA.shown && dthA.thermal === 0 && !dthA.dead, dthA);
+  await B.screenshot({ path: out + '-death.png' });
 
   // Disconnect: Bravo leaves, a bot takes over
   await B.close(); await sleep(2500);

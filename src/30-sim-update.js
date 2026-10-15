@@ -33,11 +33,7 @@ function update(dt) {
 }
 
 function updateStruct(s, dt) {
-  if (s.dead) {
-    if (s.kind === 'depot' && s.respawn > 0) { s.respawn -= dt; if (s.respawn <= 0) { s.dead = false; s.hp = s.maxHp; rebuildBlockers(); feed((s.team === 0 ? 'Green' : 'Tan') + ' supply bucket refilled', s.team === 0 ? 'fg' : 'ft'); } }
-    return;
-  }
-  if (s.kind === 'depot') return;
+  if (s.dead) return;
   s.aaT -= dt;
   if (s.target && (s.target.dead || dist(s, s.target) > s.range + s.target.r || !visibleTo(s.target, s.team))) { s.target = null; s.heat = 0; }
   var heroes = [], mins = [];
@@ -82,7 +78,7 @@ function updateUnit(u, dt) {
   if (u.aggroT > 0) u.aggroT -= dt;
   if (u.lastHitT > 0) u.lastHitT -= dt;
   if (u.tagMark) { u.tagMark.t -= dt; if (u.tagMark.t <= 0 || u.tagMark.tgt.dead) u.tagMark = null; }
-  if (u.burnT > 0) { u.burnT -= dt; damage(u.burnSrc && !u.burnSrc.dead ? u.burnSrc : null, u, u.burnDps * dt, { tick: 1 }); if (u.dead) return; }
+  if (u.burnT > 0) { u.burnT -= dt; damage(u.burnSrc && !u.burnSrc.dead ? u.burnSrc : null, u, u.burnDps * dt, { tick: 1, n: 'Burn' }); if (u.dead) return; }
   if (u.kind === 'hero') {
     var mh = maxHp(u);
     if (dist(u, fountain(u.team)) < 360) u.hp = Math.min(mh, u.hp + mh * 0.12 * dt);
@@ -90,8 +86,8 @@ function updateUnit(u, dt) {
     var aura = sumBuff(u, 'aura');
     if (aura) {
       var ar = 270;
-      enemiesNear(u.team, u, ar, false).forEach(function (e) { damage(u, e, aura * dmgMul(u) * dt, { ability: 1, tick: 1 }); });
-      var sd = sumBuff(u, 'selfdps'); if (sd) damage(null, u, sd * dt, { tick: 1 });
+      enemiesNear(u.team, u, ar, false).forEach(function (e) { damage(u, e, aura * dmgMul(u) * dt, { ability: 1, tick: 1, n: 'Aura' }); });
+      var sd = sumBuff(u, 'selfdps'); if (sd) damage(null, u, sd * dt, { tick: 1, n: 'Overload' });
       if (u.dead) return;
     }
     if (u.bot && ordersOwed(u) > 0 && atBase(u)) botPickOrder(u);
@@ -104,12 +100,12 @@ function updateUnit(u, dt) {
   if (u.dash) {
     var d = u.dash; d.t += dt; var p = Math.min(1, d.t / d.dur);
     u.x = d.fx + (d.tx - d.fx) * p; u.y = d.fy + (d.ty - d.fy) * p;
-    if (d.dmg) enemiesNear(u.team, u, 60, false).forEach(function (e) { if (!d.hit[e.id]) { d.hit[e.id] = 1; damage(u, e, d.dmg, { ability: 1 }); } });
+    if (d.dmg) enemiesNear(u.team, u, 60, false).forEach(function (e) { if (!d.hit[e.id]) { d.hit[e.id] = 1; damage(u, e, d.dmg, { ability: 1, n: d.n }); } });
     if (p >= 1) {
       if (d.land) {
         fx({ k: 'boom', x: u.x, y: u.y, r: d.land.r, t: 0, dur: 0.45 });
         sfx('boom', u.x, u.y);
-        enemiesNear(u.team, u, d.land.r, true).forEach(function (e) { damage(u, e, d.land.dmg, { slow: d.land.slow, exec: d.land.exec, ability: 1, smul: 0.5 }); });
+        enemiesNear(u.team, u, d.land.r, true).forEach(function (e) { damage(u, e, d.land.dmg, { slow: d.land.slow, exec: d.land.exec, ability: 1, smul: 0.5, n: d.n }); });
       }
       u.dash = null;
     }
@@ -133,7 +129,7 @@ function updateUnit(u, dt) {
       while (ch.acc >= ch.ab.rate) {
         ch.acc -= ch.ab.rate;
         var ang = Math.atan2(ay, ax) + rnd(-ch.ab.spread, ch.ab.spread), mz = muzzle(u);
-        G.proj.push({ x: mz.x, y: mz.y, vx: Math.cos(ang) * 1700, vy: Math.sin(ang) * 1700, life: ch.ab.range / 1700, team: u.team, owner: u, w: 14, dmg: ch.ab.dmg * ch.dm, hit: {}, kind: 'bullet' });
+        G.proj.push({ x: mz.x, y: mz.y, vx: Math.cos(ang) * 1700, vy: Math.sin(ang) * 1700, life: ch.ab.range / 1700, team: u.team, owner: u, w: 14, dmg: ch.ab.dmg * ch.dm, hit: {}, kind: 'bullet', n: ch.ab.n });
         fx({ k: 'muzzle', x: mz.x, y: mz.y, a: ang, t: 0, dur: 0.05, s: 1 });
         anim(u, 'r');
         sfx('mg', u.x, u.y);
@@ -175,7 +171,7 @@ function goalTaken(u) {
   for (var i = 0; i < G.units.length; i++) { var o = G.units[i]; if (o !== u && !o.dead && o.team === u.team && vlen(o.x - gx, o.y - gy) < o.r + u.r) return true; }
   return false;
 }
-function aaStyle(u) { return u.kind === 'hero' ? u.spec.aa : (u.type === 'melee' ? 'melee' : u.type === 'tank' ? 'tank' : 'bullet'); }
+function aaStyle(u) { return u.kind === 'hero' ? u.spec.aa : (u.type === 'melee' ? 'melee' : u.type === 'tank' ? 'tank' : u.type === 'mortar' ? 'shell' : 'bullet'); }
 function windTime(u) {
   var s = aaStyle(u);
   if (u.kind === 'hero') return s === 'melee' ? 0.12 : s === 'shell' ? 0.22 : Math.min(0.16, aaCd(u) * 0.35);
@@ -272,8 +268,8 @@ function minionAI(m, dt) {
   if (!best) G.structs.forEach(function (s) { if (s.team !== m.team && targetable(s) && dist(s, m) < 460 + s.r) best = s; });
   m.target = best;
   if (!best) {
-    var q = laneProj(m), nt = q.t + (m.team === 0 ? 0.1 : -0.1);
-    m.move = freePoint(lanePt(nt, clamp(q.off, -140, 140)), m.r);
+    var q = laneProj(m, m.lane), nt = q.t + (m.team === 0 ? 0.08 : -0.08);
+    m.move = freePoint(lanePt(nt, clamp(q.off, -60, 60), m.lane), m.r);
   }
 }
 
@@ -285,37 +281,37 @@ function botAI(u) {
   var passive = opts.passive && u.team === 1;
   var eh = passive ? null : enemyHeroNear(u, 900);
   if (eh) botCast(u, eh);
-  var front = -1;
-  G.units.forEach(function (m) { if (m.team === u.team && m.kind === 'minion' && !m.dead) front = Math.max(front, progress(m)); });
-  var myOut = G.structs.filter(function (s) { return s.team === u.team && !s.dead && s.kind === 'outpost'; }).map(function (s) { return u.team === 0 ? s.t : 1 - s.t; });
+  var lane = laneOf(u), front = -1;
+  G.units.forEach(function (m) { if (m.team === u.team && m.kind === 'minion' && !m.dead && m.lane === lane) front = Math.max(front, progress(m)); });
+  var myOut = G.structs.filter(function (s) { return s.team === u.team && !s.dead && s.kind === 'outpost' && s.lane === lane; }).map(function (s) { return u.team === 0 ? s.t : 1 - s.t; });
   var hold = myOut.length ? Math.max.apply(null, myOut) - 0.03 : 0.08;
   var want = front > 0 ? Math.max(hold, front - 0.025) : hold;
   var danger = G.structs.find(function (s) {
-    if (s.team === u.team || s.dead || s.kind === 'depot') return false;
+    if (s.team === u.team || s.dead) return false;
     if (dist(s, u) > s.range + 60) return false;
     return !G.units.some(function (m) { return m.team === u.team && m.kind === 'minion' && !m.dead && dist(m, s) < s.range; });
   });
-  if (danger) { u.target = null; var q0 = laneProj(u); u.move = freePoint(lanePt(q0.t + (u.team === 0 ? -0.06 : 0.06), q0.off), u.r); return; }
-  if (passive) { u.target = null; u.move = freePoint(lanePt(u.team === 0 ? want : 1 - want, 0), u.r); return; }
+  if (danger) { u.target = null; var q0 = laneProj(u, lane); u.move = freePoint(lanePt(q0.t + (u.team === 0 ? -0.06 : 0.06), clamp(q0.off, -60, 60), lane), u.r); return; }
+  if (passive) { u.target = null; u.move = freePoint(lanePt(u.team === 0 ? want : 1 - want, 0, lane), u.r); return; }
   var r = aaRange(u), best = null, bs = -1e9;
   G.units.forEach(function (e) {
     if (e.team === u.team || e.dead || !visibleTo(e, u.team)) return;
     var d = dist(e, u); if (d > r + 260) return;
-    var fortNear = G.structs.some(function (s) { return s.team === e.team && !s.dead && s.kind !== 'depot' && dist(s, u) < s.range + 20; });
+    var fortNear = G.structs.some(function (s) { return s.team === e.team && !s.dead && dist(s, u) < s.range + 20; });
     if (fortNear) return;
     var sc = (e.kind === 'hero' ? 400 * (1 - e.hp / maxHp(e)) + 120 : 0) - d + (e.kind === 'minion' && e.hp < aaDmg(u) ? 200 : 0);
     if (sc > bs) { bs = sc; best = e; }
   });
   if (!best) G.structs.forEach(function (s) {
     if (s.team === u.team || !targetable(s) || dist(s, u) > r + 300) return;
-    var covered = s.kind === 'depot' || G.units.some(function (m) { return m.team === u.team && m.kind === 'minion' && !m.dead && dist(m, s) < s.range; });
+    var covered = G.units.some(function (m) { return m.team === u.team && m.kind === 'minion' && !m.dead && dist(m, s) < s.range; });
     if (covered) best = s;
   });
   u.target = best;
   if (!best) {
-    var mates = G.units.filter(function (h) { return h.kind === 'hero' && h.team === u.team; }), slot = mates.indexOf(u);
-    var off = [0, -70, 70, -135, 135][slot % 5], back = (slot % 2) * 0.014;
-    u.move = freePoint(lanePt(u.team === 0 ? want - back : 1 - want + back, off), u.r);
+    var mates = G.units.filter(function (h) { return h.kind === 'hero' && h.team === u.team && laneOf(h) === lane; }), slot = Math.max(0, mates.indexOf(u));
+    var off = [0, -55, 55, -100, 100][slot % 5], back = (slot % 2) * 0.014;
+    u.move = freePoint(lanePt(u.team === 0 ? want - back : 1 - want + back, off, lane), u.r);
   }
   else u.move = null;
 }
@@ -351,9 +347,9 @@ function updateProj(dt) {
       if (e.team === p.team || e.dead || p.hit[e.id] || !visibleTo(e, p.team)) continue;
       if (vlen(e.x - p.x, (e.y - unitH(e) * 0.4) - p.y) < e.r + p.w) {
         p.hit[e.id] = 1;
-        if (p.kind === 'jack') { damage(p.owner, e, p.dmg, { proj: 1 }); p.owner.tagMark = { tgt: e, t: 3 }; p.owner.cd.D = Math.min(p.owner.cd.D, 3); fx({ k: 'ring', x: e.x, y: e.y, r: 40, t: 0, dur: 0.4, c: '#E0703F' }); done = true; break; }
+        if (p.kind === 'jack') { damage(p.owner, e, p.dmg, { proj: 1, n: p.n }); p.owner.tagMark = { tgt: e, t: 3 }; p.owner.cd.D = Math.min(p.owner.cd.D, 3); fx({ k: 'ring', x: e.x, y: e.y, r: 40, t: 0, dur: 0.4, c: '#E0703F' }); done = true; break; }
         if (p.aoe) { explode(p); done = true; break; }
-        damage(p.owner, e, p.dmg, { slow: p.slow, knock: p.knock, pull: p.pull, exec: p.exec, burn: p.burn, proj: 1, ability: p.kind !== 'bullet', fx: p.x - p.vx * 0.01, fy: p.y - p.vy * 0.01 });
+        damage(p.owner, e, p.dmg, { slow: p.slow, knock: p.knock, pull: p.pull, exec: p.exec, burn: p.burn, proj: 1, ability: p.kind !== 'bullet', fx: p.x - p.vx * 0.01, fy: p.y - p.vy * 0.01, n: p.n });
         if (!p.pierce) done = true;
       }
     }
@@ -372,7 +368,7 @@ function updateProj(dt) {
 function explode(p) {
   fx({ k: 'boom', x: p.x, y: p.y + 30, r: p.aoe, t: 0, dur: 0.45 }); fx({ k: 'scorch', x: p.x, y: p.y + 30, r: p.aoe * 0.6, t: 0, dur: 6 }); shakeAt(p.x, p.y, 5);
   sfx('boom', p.x, p.y);
-  enemiesNear(p.team, { x: p.x, y: p.y + 30 }, p.aoe, true).forEach(function (e) { damage(p.owner, e, p.dmg, { slow: p.slow, knock: p.knock, ability: 1, proj: 1, smul: 0.6, fx: p.x, fy: p.y + 30 }); });
+  enemiesNear(p.team, { x: p.x, y: p.y + 30 }, p.aoe, true).forEach(function (e) { damage(p.owner, e, p.dmg, { slow: p.slow, knock: p.knock, ability: 1, proj: 1, smul: 0.6, fx: p.x, fy: p.y + 30, n: p.n }); });
 }
 function updateLobs(dt) {
   G.lobs = G.lobs.filter(function (l) {
@@ -381,7 +377,7 @@ function updateLobs(dt) {
     if (l.single) { if (!l.single.dead) damage(l.owner, l.single, l.dmg, { aa: 1 }); fx({ k: 'boom', x: l.x, y: l.y, r: 50, t: 0, dur: 0.35 }); sfx('boom', l.x, l.y); return false; }
     if (l.smoke) fx({ k: 'smokecloud', x: l.x, y: l.y, r: l.r, t: 0, dur: 2.5 });
     else { fx({ k: 'boom', x: l.x, y: l.y, r: l.r, t: 0, dur: 0.5 }); fx({ k: 'scorch', x: l.x, y: l.y, r: l.r * 0.6, t: 0, dur: 6 }); sfx('boom', l.x, l.y); shakeAt(l.x, l.y, 4); }
-    enemiesNear(l.team, l, l.r, !l.smoke).forEach(function (e) { damage(l.owner, e, l.dmg, { slow: l.slow, ability: 1, smul: l.smul || 0.5 }); if (l.smoke) { e.slowT = 2.5; e.slowAmt = Math.max(e.slowAmt, l.slow); } });
+    enemiesNear(l.team, l, l.r, !l.smoke).forEach(function (e) { damage(l.owner, e, l.dmg, { slow: l.slow, ability: 1, smul: l.smul || 0.5, n: l.n }); if (l.smoke) { e.slowT = 2.5; e.slowAmt = Math.max(e.slowAmt, l.slow); } });
     return false;
   });
 }
@@ -391,7 +387,7 @@ function updateMines(dt) {
     var hit = G.units.find(function (u) { return u.team !== m.team && !u.dead && dist(u, m) < 42 + u.r; });
     if (hit) {
       fx({ k: 'boom', x: m.x, y: m.y, r: m.r, t: 0, dur: 0.45 }); sfx('boom', m.x, m.y);
-      enemiesNear(m.team, m, m.r, false).forEach(function (e) { damage(m.owner, e, m.dmg, { ability: 1, slow: 0.4 }); });
+      enemiesNear(m.team, m, m.r, false).forEach(function (e) { damage(m.owner, e, m.dmg, { ability: 1, slow: 0.4, n: m.n }); });
       return false;
     }
     return m.life > 0;
@@ -399,7 +395,8 @@ function updateMines(dt) {
 }
 function startBarrage() {
   if (G.barrage) return;
-  G.barrage = { beams: [ { t: 0.5, dir: -1, acc: 0 }, { t: 0.5, dir: 1, acc: 0.15 } ], r: 150 };
+  G.barrage = { beams: [], r: 150 };
+  for (var li = 0; li < LANES.length; li++) { G.barrage.beams.push({ t: 0.5, dir: -1, acc: li * 0.05, lane: li }); G.barrage.beams.push({ t: 0.5, dir: 1, acc: 0.15 + li * 0.05, lane: li }); }
   emit('sprinkler');
   feed('The sprinkler came on: water sweeping out from the centre', '');
 }
@@ -408,8 +405,8 @@ function updateBarrage(dt) {
   if (!G.barrage) return;
   G.barrage.beams.forEach(function (b) {
     b.t = clamp(b.t + b.dir * dt * 0.012, 0.08, 0.92);
-    var c = lanePt(b.t, Math.sin(G.time * 0.9 + b.dir) * 90); b.x = c.x; b.y = c.y;
-    G.units.forEach(function (u) { if (!u.dead && dist(u, b) < G.barrage.r) damage(null, u, (u.kind === 'hero' ? 140 : 220) * dt, { tick: 1 }); });
+    var c = lanePt(b.t, Math.sin(G.time * 0.9 + b.dir) * 60, b.lane); b.x = c.x; b.y = c.y;
+    G.units.forEach(function (u) { if (!u.dead && dist(u, b) < G.barrage.r) damage(null, u, (u.kind === 'hero' ? 140 : 220) * dt, { tick: 1, n: 'Sprinkler' }); });
     b.acc -= dt;
     if (b.acc <= 0) { b.acc = 0.22; var a = rnd(0, Math.PI * 2), rr = Math.random() * G.barrage.r; fx({ k: 'splash', x: b.x + Math.cos(a) * rr, y: b.y + Math.sin(a) * rr * 0.6, t: 0, dur: 0.5 }); sfx('splash', b.x, b.y); }
   });

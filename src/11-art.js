@@ -30,7 +30,9 @@ function capP(a, b, r) {
     'A' + r + ',' + r + ' 0 0 0 ' + r1(a[0] + nx) + ',' + r1(a[1] + ny) + 'Z';
 }
 var poseCache = {};
+var POSE_ALIAS = { m_melee: 'charger', m_rifle: 'pointman', m_mortar: 'mortar' };
 function posePaths(key) {
+  key = POSE_ALIAS[key] || key;
   if (poseCache[key]) return poseCache[key];
   var P = POSES[key] || POSES.pointman, tr = P.tr || 16, hr = P.hr || 13, d = '', low = [];
   function note(pt) { if (pt[1] > 192) low.push(pt[0]); }
@@ -57,6 +59,16 @@ function posePaths(key) {
   return out;
 }
 function paintPose(ctx, key, team, flip, flash) {
+  var art = heroArt(key, team);
+  if (art) {
+    // fit the illustration into the 200x240 figure box, standing on its bottom edge
+    var fw = 200, fh = 240, k = Math.min(fw / art.width, fh / art.height), dw = art.width * k, dh2 = art.height * k;
+    ctx.save(); if (flip) { ctx.translate(200, 0); ctx.scale(-1, 1); }
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(art, (fw - dw) / 2, fh - dh2, dw, dh2);
+    if (flash) { ctx.globalCompositeOperation = 'source-atop'; ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, fw, fh); }
+    ctx.restore(); return;
+  }
   var p = posePaths(key), C = TEAMC[team];
   ctx.save();
   if (flip) { ctx.translate(200, 0); ctx.scale(-1, 1); }
@@ -141,15 +153,55 @@ function paintGear(ctx, key, C) {
   if (key === 'flamer' && ex[2]) drawGun(ctx, [ex[2][0], ex[2][1]], [ex[2][2], ex[2][3]], 'flame');
   if (key === 'sweeper' && ex[1]) { ctx.fillStyle = GUN.fill; ctx.strokeStyle = GUN.edge; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(ex[1][2] - 6, ex[1][3], 15, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
 }
+/* Illustrated soldiers (assets/heroes/<key>.png, green plastic). Tan gets the same figure recoloured to tan plastic.
+   A sprite is drawn with its base plate at the unit's feet; HSCALE sets how tall each figure stands relative to a standing soldier. */
+var HERO_ART = {}, HSCALE = { sniper: 0.5, para: 1.3, mortar: 0.95, kneeler: 0.9, m_mortar: 0.9, m_tank: 1, m_jeep: 1 };
+function loadHeroArt(img) {
+  HEROES.forEach(function (hs) { img('assets/heroes/' + hs.key + '.png', function (im) { if (im) HERO_ART[hs.key] = { img: im, tan: null }; }); });
+  ['melee', 'rifle', 'mortar', 'tank', 'jeep'].forEach(function (k) { img('assets/minions/' + k + '.png', function (im) { if (im) HERO_ART['m_' + k] = { img: im, tan: null }; }); });
+}
+function tanify(im) {
+  var cv = document.createElement('canvas'); cv.width = im.width; cv.height = im.height;
+  var c = cv.getContext('2d', { willReadFrequently: true }); c.drawImage(im, 0, 0);
+  var d;
+  try { d = c.getImageData(0, 0, cv.width, cv.height); }
+  catch (e) { c.clearRect(0, 0, cv.width, cv.height); c.filter = 'sepia(1) saturate(1.3) brightness(1.08)'; c.drawImage(im, 0, 0); return cv; }
+  var px = d.data;
+  // dark olive outlines stay dark; plastic greens become tan: shadows #6B5330, mid #B99A62, highlights #EADCB0
+  for (var i = 0; i < px.length; i += 4) {
+    if (px[i + 3] < 8) continue;
+    var l = (px[i] * 77 + px[i + 1] * 151 + px[i + 2] * 28) >> 8, t = l / 255;
+    var r, g, b;
+    if (t < 0.5) { var k = t / 0.5; r = 36 + (185 - 36) * k; g = 28 + (154 - 28) * k; b = 16 + (98 - 16) * k; }
+    else { var k2 = (t - 0.5) / 0.5; r = 185 + (240 - 185) * k2; g = 154 + (224 - 154) * k2; b = 98 + (178 - 98) * k2; }
+    px[i] = r; px[i + 1] = g; px[i + 2] = b;
+  }
+  c.putImageData(d, 0, 0);
+  return cv;
+}
+function heroArt(key, team) {
+  var a = HERO_ART[key]; if (!a) return null;
+  if (team === 1 && !a.tan) a.tan = tanify(a.img);
+  return team === 1 ? a.tan : a.img;
+}
 var spriteCache = {};
 function sprite(key, team, h, flip, flash) {
   var id = key + '|' + team + '|' + h + '|' + (flip ? 1 : 0) + (flash ? 'f' : '');
   if (spriteCache[id]) return spriteCache[id];
-  var S = 2, w = Math.ceil(h * 200 / 240), cv = document.createElement('canvas');
-  cv.width = w * S; cv.height = h * S;
-  var c = cv.getContext('2d');
-  c.scale(S * h / 240, S * h / 240);
-  paintPose(c, key, team, flip, flash);
-  spriteCache[id] = { cv: cv, w: w, h: h };
+  var S = 2.5, art = heroArt(key, team), cv = document.createElement('canvas'), c, w, dh;
+  if (art) {
+    dh = h * (HSCALE[key] || 1); w = Math.ceil(dh * art.width / art.height);
+    cv.width = Math.ceil(w * S); cv.height = Math.ceil(dh * S);
+    c = cv.getContext('2d'); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    if (flip) { c.translate(cv.width, 0); c.scale(-1, 1); }
+    c.drawImage(art, 0, 0, cv.width, cv.height);
+    if (flash) { c.globalCompositeOperation = 'source-in'; c.fillStyle = '#FFFFFF'; c.fillRect(0, 0, cv.width, cv.height); }
+    spriteCache[id] = { cv: cv, w: w, h: dh, ox: -w / 2, oy: -dh + 6 };
+  } else {
+    w = Math.ceil(h * 200 / 240); cv.width = Math.ceil(w * S); cv.height = Math.ceil(h * S);
+    c = cv.getContext('2d'); c.scale(S * h / 240, S * h / 240);
+    paintPose(c, key, team, flip, flash);
+    spriteCache[id] = { cv: cv, w: w, h: h, ox: -w / 2, oy: -h * 226 / 240 };
+  }
   return spriteCache[id];
 }

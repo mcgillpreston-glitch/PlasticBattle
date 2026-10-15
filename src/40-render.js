@@ -8,7 +8,7 @@ function resize() {
   DPR = Math.min(1.5, window.devicePixelRatio || 1);
   VW = cv.clientWidth; VH = cv.clientHeight;
   cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
-  var sideEl = document.getElementById('side'); SIDE_W = sideEl && window.innerWidth > 760 ? sideEl.offsetWidth : 0;
+  SIDE_W = 0;
   cam.zBase = clamp(Math.min((VW - SIDE_W) / 1500, VH / 900) * 1.1, 0.45, 1.25);
   if (!cam.zSet) cam.z = cam.zBase;
 }
@@ -19,8 +19,6 @@ function s2w(x, y) { return { x: (x - viewCX()) / cam.z + cam.x, y: (y - VH / 2)
 function w2s(x, y) { return { x: (x - cam.x) * cam.z + viewCX(), y: (y - cam.y) * cam.z + VH / 2 }; }
 function ell(c, x, y, rx, ry) { c.beginPath(); c.ellipse(x, y, Math.max(0.1, rx), Math.max(0.1, ry), 0, 0, Math.PI * 2); }
 function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r); c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h); c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r); c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath(); }
-function laneSkew(c, x, y) { c.transform(Math.cos(LANG), Math.sin(LANG), 0, 1, x, y); }
-
 function checkBlend() {
   var t = document.createElement('canvas').getContext('2d');
   ['saturation', 'overlay'].forEach(function (m) { t.globalCompositeOperation = m; blendOK[m] = t.globalCompositeOperation === m; });
@@ -31,82 +29,51 @@ function makeGrain() {
   for (var i = 0; i < d.length; i += 4) { var v = 100 + Math.random() * 110; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
   c.putImageData(img, 0, 0);
 }
-var TERR = { ox: -700, oy: -700, w: MAP.W + 1400, h: MAP.H + 1400, s: 0.7 };
-var SAND = { L0: -LLEN / 2 - 330, L1: LLEN / 2 + 330, H: MAP.half + 20, plank: 46 };
+/* The battlefield is the painted sandbox (assets/map.webp, one world unit per pixel). ASSETS is filled by loadAssets() before the game starts. */
+var ASSETS = { map: null, miniCv: null };
 function buildTerrain() {
-  var T = document.createElement('canvas'); T.width = Math.round(TERR.w * TERR.s); T.height = Math.round(TERR.h * TERR.s);
-  var c = T.getContext('2d'), R = seeded(11);
-  c.scale(TERR.s, TERR.s); c.translate(-TERR.ox, -TERR.oy);
-  // lawn with mow stripes
-  c.fillStyle = '#5A8F3C'; c.fillRect(TERR.ox, TERR.oy, TERR.w, TERR.h);
-  c.save(); c.translate(LCX, LCY); c.rotate(LANG);
-  for (var sx = -3200; sx < 3200; sx += 160) { c.fillStyle = (sx / 160) % 2 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)'; c.fillRect(sx, -2600, 160, 5200); }
-  c.restore();
-  for (var i = 0; i < 2600; i++) { var gx = TERR.ox + R() * TERR.w, gy = TERR.oy + R() * TERR.h, gr = 6 + R() * 26; c.fillStyle = i % 3 ? 'rgba(130,190,80,0.16)' : 'rgba(30,70,20,0.18)'; ell(c, gx, gy, gr, gr * 0.5); c.fill(); }
-  for (i = 0; i < 260; i++) { gx = TERR.ox + R() * TERR.w; gy = TERR.oy + R() * TERR.h; c.strokeStyle = 'rgba(190,220,120,0.5)'; c.lineWidth = 2; c.beginPath(); c.moveTo(gx, gy); c.lineTo(gx + (R() - 0.5) * 8, gy - 8 - R() * 8); c.stroke(); if (R() < 0.2) { c.fillStyle = '#F2D53C'; ell(c, gx, gy - 12, 4, 4); c.fill(); } }
-  c.save(); c.translate(LCX, LCY); c.rotate(LANG);
-  var L0 = SAND.L0, L1 = SAND.L1, H = SAND.H, PW = SAND.plank, x, y, s;
-  // yard furniture outside the box
-  function stone(px, py) { c.fillStyle = '#A9A49A'; rrect(c, px - 46, py - 32, 92, 64, 6); c.fill(); c.fillStyle = 'rgba(0,0,0,0.18)'; rrect(c, px - 46, py + 26, 92, 8, 3); c.fill(); c.fillStyle = 'rgba(255,255,255,0.14)'; rrect(c, px - 42, py - 30, 84, 6, 3); c.fill(); }
-  for (x = L0 - 60; x < L1 + 60; x += 110) stone(x, -H - PW - 90);
-  // garden hose coil
-  c.strokeStyle = '#2E7D32'; c.lineWidth = 12; c.lineCap = 'round';
-  c.beginPath(); for (var a = 0; a < Math.PI * 7; a += 0.2) { var rr = 40 + a * 5; var hx = L0 - 140 + Math.cos(a) * rr, hy = H + PW + 230 + Math.sin(a) * rr * 0.6; if (!a) c.moveTo(hx, hy); else c.lineTo(hx, hy); } c.stroke();
-  c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 3; c.stroke();
-  c.strokeStyle = '#2E7D32'; c.lineWidth = 12; c.beginPath(); c.moveTo(L0 - 140 + 150, H + PW + 230 + 70); c.quadraticCurveTo(L0 + 600, H + PW + 400, L1 - 200, H + PW + 260); c.stroke();
-  // flower bed
-  for (x = L1 - 900; x < L1 + 200; x += 70) { y = H + PW + 170 + (R() - 0.5) * 40; c.fillStyle = '#4A3321'; ell(c, x, y + 10, 40, 16); c.fill(); c.strokeStyle = '#3F8A2E'; c.lineWidth = 4; c.beginPath(); c.moveTo(x, y); c.lineTo(x, y - 40); c.stroke(); c.fillStyle = ['#E53935', '#FDD835', '#F06292', '#FF7043'][Math.floor(R() * 4)]; ell(c, x, y - 48, 12, 14); c.fill(); }
-  // sprinkler head, dog bowl, tennis ball, gnome
-  c.fillStyle = '#3A3F44'; ell(c, L0 + 500, -H - PW - 190, 10, 6); c.fill(); c.fillStyle = '#9AA0A6'; c.fillRect(L0 + 497, -H - PW - 210, 6, 22);
-  c.fillStyle = '#D32F2F'; ell(c, L1 - 500, -H - PW - 200, 44, 20); c.fill(); c.fillStyle = '#7B1F1F'; ell(c, L1 - 500, -H - PW - 204, 34, 13); c.fill(); c.fillStyle = '#5D4037'; ell(c, L1 - 500, -H - PW - 206, 26, 9); c.fill();
-  c.fillStyle = '#C6E22E'; ell(c, L0 + 260, H + PW + 110, 20, 20); c.fill(); c.strokeStyle = '#F5F7E8'; c.lineWidth = 3; c.beginPath(); c.arc(L0 + 260, H + PW + 110, 14, 0.4, 2.2); c.stroke();
-  c.fillStyle = '#1E6BB5'; rrect(c, L1 + 120, -H - 20, 30, 60, 6); c.fill(); c.fillStyle = '#F2C9A0'; ell(c, L1 + 135, -H - 30, 12, 12); c.fill(); c.fillStyle = '#D32F2F'; c.beginPath(); c.moveTo(L1 + 120, -H - 34); c.lineTo(L1 + 135, -H - 74); c.lineTo(L1 + 150, -H - 34); c.closePath(); c.fill(); c.fillStyle = '#F5F5F5'; ell(c, L1 + 135, -H - 18, 10, 8); c.fill();
-  // sandbox frame (planks)
-  function plank(px, py, w, h) { c.fillStyle = '#9B6B3A'; c.fillRect(px, py, w, h); c.fillStyle = 'rgba(255,220,160,0.25)'; c.fillRect(px, py, w, 6); c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillRect(px, py + h - 7, w, 7); c.strokeStyle = '#5A3A1C'; c.lineWidth = 3; c.strokeRect(px, py, w, h); c.strokeStyle = 'rgba(60,35,15,0.35)'; c.lineWidth = 1.5; for (var k = 10; k < h - 6; k += 12) { c.beginPath(); c.moveTo(px + 6, py + k); c.bezierCurveTo(px + w * 0.3, py + k + 3, px + w * 0.7, py + k - 3, px + w - 6, py + k + 1); c.stroke(); } }
-  c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillRect(L0 - PW - 6, -H - PW + 10, L1 - L0 + 2 * PW + 24, 2 * H + 2 * PW + 14);
-  plank(L0 - PW, -H - PW, L1 - L0 + 2 * PW, PW); plank(L0 - PW, H, L1 - L0 + 2 * PW, PW);
-  c.save(); c.translate(L0 - PW / 2, 0); c.rotate(Math.PI / 2); plank(-H - PW, -PW / 2, 2 * H + 2 * PW, PW); c.restore();
-  c.save(); c.translate(L1 + PW / 2, 0); c.rotate(Math.PI / 2); plank(-H - PW, -PW / 2, 2 * H + 2 * PW, PW); c.restore();
-  [[L0 - PW, -H - PW], [L1, -H - PW], [L0 - PW, H], [L1, H]].forEach(function (p) { c.fillStyle = '#7A4F26'; c.fillRect(p[0] - 4, p[1] - 4, PW + 8, PW + 8); c.strokeStyle = '#3E2612'; c.lineWidth = 3; c.strokeRect(p[0] - 4, p[1] - 4, PW + 8, PW + 8); c.fillStyle = '#B8B8B8'; ell(c, p[0] + PW / 2, p[1] + PW / 2, 4, 4); c.fill(); });
-  // sand
-  c.fillStyle = '#E3CB93'; c.fillRect(L0, -H, L1 - L0, 2 * H);
-  for (i = 0; i < 4200; i++) { x = L0 + R() * (L1 - L0); y = -H + R() * 2 * H; var sr = 1.5 + R() * 5; c.fillStyle = i % 3 ? 'rgba(170,135,80,0.22)' : 'rgba(255,245,215,0.3)'; ell(c, x, y, sr, sr * 0.7); c.fill(); }
-  for (i = 0; i < 14; i++) { x = L0 + R() * (L1 - L0); y = (R() - 0.5) * 2 * H; c.fillStyle = 'rgba(150,115,60,0.28)'; ell(c, x, y, 60 + R() * 120, 30 + R() * 50); c.fill(); }
-  var sh = c.createLinearGradient(0, -H, 0, -H + 90); sh.addColorStop(0, 'rgba(60,40,10,0.35)'); sh.addColorStop(1, 'rgba(60,40,10,0)'); c.fillStyle = sh; c.fillRect(L0, -H, L1 - L0, 90);
-  sh = c.createLinearGradient(L0, 0, L0 + 90, 0); sh.addColorStop(0, 'rgba(60,40,10,0.3)'); sh.addColorStop(1, 'rgba(60,40,10,0)'); c.fillStyle = sh; c.fillRect(L0, -H, 90, 2 * H);
-  // rake lines, footprints, toy tracks
-  c.strokeStyle = 'rgba(150,115,60,0.35)'; c.lineWidth = 2;
-  for (i = 0; i < 9; i++) { x = L0 + 200 + i * 290; c.beginPath(); for (var k = -H + 20; k < H - 20; k += 10) { var wx = x + Math.sin(k * 0.08 + i) * 18; if (k === -H + 20) c.moveTo(wx, k); else c.lineTo(wx, k); } c.stroke(); }
-  for (i = 0; i < 40; i++) { x = L0 + R() * (L1 - L0); y = (R() - 0.5) * 2 * (H - 30); var fa = R() * Math.PI; c.fillStyle = 'rgba(140,105,55,0.35)'; c.save(); c.translate(x, y); c.rotate(fa); ell(c, -10, 0, 7, 4); c.fill(); ell(c, 10, 6, 7, 4); c.fill(); c.restore(); }
-  c.strokeStyle = 'rgba(140,105,55,0.4)'; c.lineWidth = 10; c.setLineDash([14, 10]);
-  [-44, 44].forEach(function (ry) { c.beginPath(); for (x = L0; x <= L1; x += 60) { var yy = ry + Math.sin(x * 0.011) * 26; if (x === L0) c.moveTo(x, yy); else c.lineTo(x, yy); } c.stroke(); });
-  c.setLineDash([]);
-  // damp patch near the sprinkler side, and a few sand-castle crumbs
-  c.fillStyle = 'rgba(120,95,50,0.35)'; ell(c, L0 + 520, -H + 70, 170, 60); c.fill();
-  [[0.19, 120], [0.81, -120], [0.44, -30], [0.63, 40]].forEach(function (p) { x = (p[0] - 0.5) * LLEN; y = p[1]; c.fillStyle = '#CDB27A'; ell(c, x, y, 40, 18); c.fill(); c.fillStyle = '#D9C086'; for (var q = 0; q < 5; q++) { ell(c, x + (q - 2) * 14, y - 6 - (q % 2) * 6, 8, 6); c.fill(); } });
-  c.restore();
-  return T;
+  /* a small, radar-tinted copy of the map for the minimap */
+  var mc = document.createElement('canvas'); mc.width = 440; mc.height = Math.round(440 * MAP.H / MAP.W);
+  var c = mc.getContext('2d');
+  if (ASSETS.map) { c.drawImage(ASSETS.map, 0, 0, mc.width, mc.height); c.globalCompositeOperation = 'saturation'; c.fillStyle = '#000'; c.fillRect(0, 0, mc.width, mc.height); c.globalCompositeOperation = 'multiply'; c.fillStyle = '#4FA85A'; c.fillRect(0, 0, mc.width, mc.height); c.globalCompositeOperation = 'source-over'; }
+  else { c.fillStyle = '#1E4D22'; c.fillRect(0, 0, mc.width, mc.height); }
+  ASSETS.miniCv = mc;
+  return mc;
 }
-
+function drawTerrain() {
+  if (ASSETS.map) ctx.drawImage(ASSETS.map, 0, 0, MAP.W, MAP.H);
+  else { ctx.fillStyle = '#D9C086'; ctx.fillRect(0, 0, MAP.W, MAP.H); }
+}
+function camXf(shx, shy) { ctx.translate(viewCX() + shx, VH / 2 + shy); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y); }
 function draw() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  ctx.fillStyle = '#5A8F3C'; ctx.fillRect(0, 0, VW, VH);
+  ctx.fillStyle = '#4C7A33'; ctx.fillRect(0, 0, VW, VH);
   if (!G) return;
-  ctx.save();
   var shx = G.shake > 0 ? (Math.random() - 0.5) * G.shake * 2 : 0, shy = G.shake > 0 ? (Math.random() - 0.5) * G.shake * 2 : 0;
-  ctx.translate(viewCX() + shx, VH / 2 + shy); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y);
+  var therm = G.thermal || 0;
+  if (therm < 1) drawScene(shx, shy);
+  if (therm > 0) thermalPass(therm, shx, shy);
+  drawOverlays(shx, shy);
+  postProcess();
+  drawMini();
+}
+/* The world: terrain, props, structures, units, shots and effects. Draws through whatever `ctx` currently is (the screen, or the small thermal canvas). */
+function drawScene(shx, shy) {
+  ctx.save();
+  camXf(shx, shy);
   ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(terrain, TERR.ox, TERR.oy, TERR.w, TERR.h);
+  drawTerrain();
   [0, 1].forEach(function (t) { var fp = fountain(t); ctx.fillStyle = t === MYTEAM ? 'rgba(91,214,107,0.12)' : 'rgba(240,69,58,0.12)'; ell(ctx, fp.x, fp.y, 330, 330); ctx.fill(); });
+  BRUSH.forEach(function (b, i) { drawThicket(b, i); });
   G.fx.forEach(function (f) { if (f.k === 'scorch' || f.k === 'glow' || f.k === 'castring') drawFx(f); });
   G.crates.forEach(function (c) { if (c.up) drawCrate(c.x, c.y); else { ctx.strokeStyle = 'rgba(20,19,15,0.4)'; ctx.setLineDash([4, 4]); ctx.strokeRect(c.x - 16, c.y - 16, 32, 32); ctx.setLineDash([]); } });
   G.mines.forEach(function (m) { if (m.team !== MYTEAM && m.arm <= 0 && dist(m, G.player) > 200) return; ctx.fillStyle = m.arm > 0 ? '#6B6B60' : '#3A3A30'; ell(ctx, m.x, m.y, 16, 8); ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = '#B4432E'; ell(ctx, m.x, m.y - 3, 3, 3); ctx.fill(); });
   G.lobs.forEach(function (l) { if (l.single) return; var p = Math.min(1, l.t / l.delay); ctx.strokeStyle = l.team === MYTEAM ? 'rgba(91,214,107,0.85)' : 'rgba(240,69,58,0.9)'; ctx.lineWidth = 3; ell(ctx, l.x, l.y, l.r, l.r * 0.6); ctx.stroke(); ctx.fillStyle = l.team === MYTEAM ? 'rgba(91,214,107,0.18)' : 'rgba(240,69,58,0.2)'; ell(ctx, l.x, l.y, l.r * p, l.r * 0.6 * p); ctx.fill(); });
   if (opts.ranges) {
-    G.structs.forEach(function (s) { if (s.dead || s.kind === 'depot') return; ctx.strokeStyle = 'rgba(224,112,63,0.6)'; ctx.lineWidth = 2; ctx.setLineDash([10, 8]); ell(ctx, s.x, s.y, s.range, s.range); ctx.stroke(); ctx.setLineDash([]); });
+    G.structs.forEach(function (s) { if (s.dead) return; ctx.strokeStyle = 'rgba(224,112,63,0.6)'; ctx.lineWidth = 2; ctx.setLineDash([10, 8]); ell(ctx, s.x, s.y, s.range, s.range); ctx.stroke(); ctx.setLineDash([]); });
     G.units.forEach(function (u) { if (u.kind !== 'hero' || u.dead) return; ctx.strokeStyle = u.team === MYTEAM ? 'rgba(91,214,107,0.5)' : 'rgba(240,69,58,0.5)'; ctx.lineWidth = 2; ell(ctx, u.x, u.y, aaRange(u), aaRange(u)); ctx.stroke(); });
   } else if (G.player && !G.player.dead) {
-    G.structs.forEach(function (s) { if (s.dead || s.team === MYTEAM || s.kind === 'depot') return; var d = dist(s, G.player); if (d < s.range + 160) { ctx.strokeStyle = 'rgba(224,112,63,' + clamp((s.range + 160 - d) / 160, 0, 0.8) + ')'; ctx.lineWidth = 3; ctx.setLineDash([12, 8]); ell(ctx, s.x, s.y, s.range, s.range); ctx.stroke(); ctx.setLineDash([]); } });
+    G.structs.forEach(function (s) { if (s.dead || s.team === MYTEAM) return; var d = dist(s, G.player); if (d < s.range + 160) { ctx.strokeStyle = 'rgba(224,112,63,' + clamp((s.range + 160 - d) / 160, 0, 0.8) + ')'; ctx.lineWidth = 3; ctx.setLineDash([12, 8]); ell(ctx, s.x, s.y, s.range, s.range); ctx.stroke(); ctx.setLineDash([]); } });
   }
   if (opts.col) {
     ctx.lineCap = 'round';
@@ -128,11 +95,9 @@ function draw() {
   drawAimLines();
   var items = [];
   G.structs.forEach(function (s) { items.push({ y: s.y, f: function () { drawStruct(s); } }); });
-  PROPS.forEach(function (p) { items.push({ y: p.y, f: function () { drawProp(p); } }); });
   G.units.forEach(function (u) { if (u.dead && u.deathT > 1.4) return; if (!u.dead && !visibleTo(u, MYTEAM)) return; items.push({ y: u.y, f: function () { drawUnit(u); } }); });
   items.sort(function (a, b) { return a.y - b.y; });
   items.forEach(function (it) { it.f(); });
-  BRUSH.forEach(function (b, i) { drawThicket(b, i); });
   G.proj.forEach(function (p) {
     var pa = Math.atan2(p.vy, p.vx);
     if (p.kind === 'rocket') {
@@ -156,7 +121,13 @@ function draw() {
   });
   if (G.barrage) G.barrage.beams.forEach(function (b) { if (b.x == null) return; var r = G.barrage.r; ctx.fillStyle = 'rgba(90,160,230,0.22)'; ell(ctx, b.x, b.y, r, r * 0.65); ctx.fill(); ctx.strokeStyle = 'rgba(190,225,255,0.85)'; ctx.lineWidth = 3; ctx.setLineDash([6, 10]); ell(ctx, b.x, b.y, r, r * 0.65); ctx.stroke(); ctx.setLineDash([]); for (var q = 0; q < 10; q++) { var qa = G.time * 3 + q * 0.63, qf = (G.time * 0.9 + q * 0.1) % 1, qr = r * (0.3 + 0.7 * qf); ctx.fillStyle = 'rgba(200,235,255,0.8)'; ell(ctx, b.x + Math.cos(qa) * qr, b.y + Math.sin(qa) * qr * 0.65 - 20 - 30 * Math.sin(qf * Math.PI), 3, 5); ctx.fill(); } });
   G.fx.forEach(function (f) { if (f.k !== 'scorch' && f.k !== 'glow' && f.k !== 'castring' && f.k !== 'callout') drawFx(f); });
-  G.structs.forEach(function (s) { if (!s.dead) bar(s.x, s.y - (s.kind === 'hq' ? 178 : s.kind === 'depot' ? 100 : 116), s.kind === 'hq' ? 150 : 110, 9, s.hp / s.maxHp, s.team, targetable(s) ? null : 'locked'); });
+  ctx.restore();
+}
+/* Nameplates, health bars, target brackets, callouts and damage numbers: always crisp, drawn over the scene or the thermal feed. */
+function drawOverlays(shx, shy) {
+  ctx.save();
+  camXf(shx, shy);
+  G.structs.forEach(function (s) { if (!s.dead) bar(s.x, s.y - (s.kind === 'hq' ? 190 : 150), s.kind === 'hq' ? 170 : 110, 9, s.hp / s.maxHp, s.team, targetable(s) ? null : 'locked'); });
   G.units.forEach(function (u) {
     if (u.dead || !visibleTo(u, MYTEAM)) return;
     var hh = unitH(u);
@@ -173,18 +144,105 @@ function draw() {
   G.fx.forEach(function (f) { if (f.k === 'callout') drawFx(f); });
   G.texts.forEach(function (t) { var pop = t.t < 0.1 ? 1.5 - t.t * 5 : 1; ctx.save(); ctx.translate(t.x, t.y); ctx.scale(pop, pop); ctx.globalAlpha = t.t < 0.6 ? 1 : 1 - (t.t - 0.6) / 0.3; ctx.font = '400 ' + (t.big ? 24 : 17) + 'px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(t.txt, 0, 0); ctx.fillStyle = t.color; ctx.fillText(t.txt, 0, 0); ctx.restore(); ctx.globalAlpha = 1; });
   ctx.restore();
-  postProcess();
-  drawMini();
+}
+/* Thermal feed while reinforcing: the scene is downsampled, heat is painted onto bodies, shots and blasts, and every pixel is mapped through an ironbow palette (cold blue to white-hot). */
+var THERM = { cv: null, x: null, lut: null, scan: null, seed: 1 };
+function thermLut() {
+  var stops = [[0, 2, 0, 12], [0.14, 14, 0, 58], [0.3, 76, 0, 138], [0.44, 158, 12, 118], [0.57, 212, 44, 40], [0.7, 246, 124, 18], [0.84, 255, 206, 48], [1, 255, 255, 255]];
+  var L = new Uint8ClampedArray(256 * 3);
+  for (var i = 0; i < 256; i++) {
+    var v = i / 255, j = 1; while (j < stops.length - 1 && stops[j][0] < v) j++;
+    var a = stops[j - 1], b = stops[j], f = clamp((v - a[0]) / (b[0] - a[0]), 0, 1);
+    L[i * 3] = a[1] + (b[1] - a[1]) * f; L[i * 3 + 1] = a[2] + (b[2] - a[2]) * f; L[i * 3 + 2] = a[3] + (b[3] - a[3]) * f;
+  }
+  return L;
+}
+function thermalPass(amt, shx, shy) {
+  var T = THERM;
+  if (!T.lut) T.lut = thermLut();
+  if (!T.cv) { T.cv = document.createElement('canvas'); T.x = T.cv.getContext('2d', { willReadFrequently: true }); }
+  var sw = cv.width, sh = cv.height, s = Math.min(0.5, Math.sqrt(150000 / Math.max(1, sw * sh)));
+  var tw = Math.max(16, Math.round(sw * s)), th = Math.max(16, Math.round(sh * s)), k = tw / VW;
+  if (T.cv.width !== tw || T.cv.height !== th) { T.cv.width = tw; T.cv.height = th; }
+  var main = ctx; ctx = T.x;
+  ctx.setTransform(k, 0, 0, k, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.imageSmoothingEnabled = true;
+  ctx.fillStyle = '#3A5A2A'; ctx.fillRect(0, 0, VW, VH);
+  var _t0 = performance.now();
+  drawScene(shx, shy);
+  if (T.prof) T.prof.scene = performance.now() - _t0;
+  ctx.setTransform(k, 0, 0, k, 0, 0);
+  ctx.fillStyle = 'rgba(0,0,0,0.66)'; ctx.fillRect(0, 0, VW, VH);
+  var x = ctx, z = cam.z;
+  function blob(wx, wy, rx, ry, heat, cold) {
+    if (heat <= 0.01) return;
+    var p = w2s(wx, wy); rx = Math.max(1.5 / k, rx * z); ry = Math.max(1.5 / k, ry * z);
+    if (p.x < -rx || p.y < -ry || p.x > VW + rx || p.y > VH + ry) return;
+    x.save(); x.translate(p.x, p.y); x.scale(rx, ry);
+    var g = x.createRadialGradient(0, 0, 0, 0, 0, 1), c = cold ? '0,0,0,' : '255,255,255,';
+    g.addColorStop(0, 'rgba(' + c + heat + ')'); g.addColorStop(0.5, 'rgba(' + c + (heat * 0.55) + ')'); g.addColorStop(1, 'rgba(' + c + '0)');
+    x.fillStyle = g; x.beginPath(); x.arc(0, 0, 1, 0, Math.PI * 2); x.fill(); x.restore();
+  }
+  if (G.barrage) G.barrage.beams.forEach(function (b) { if (b.x != null) blob(b.x, b.y, G.barrage.r, G.barrage.r * 0.65, 0.85, true); });
+  x.globalCompositeOperation = 'lighter';
+  G.structs.forEach(function (st) { if (st.dead) { blob(st.x, st.y - 30, st.r * 1.2, st.r * 0.8, 0.22); return; } blob(st.x, st.y - (st.kind === 'hq' ? 110 : 80), st.r * 0.8, st.r * 0.6, 0.34); });
+  G.units.forEach(function (u) {
+    if (u.dead ? (u.deathT || 0) > 1.4 : (!visibleTo(u, MYTEAM) || u._hidden)) return;
+    var h = unitH(u), veh = u.type === 'tank' || u.type === 'jeep', heat = u.kind === 'hero' ? 1 : veh ? 0.92 : 0.8;
+    if (u.dead) heat *= clamp(1 - (u.deathT || 0) / 1.4, 0, 1) * 0.9;
+    if (u.dead || veh) { blob(u.x, u.y - h * 0.45, h * (veh ? 0.7 : 0.34), h * 0.5, heat); return; }
+    // white-hot silhouette of the actual sculpt, with a soft bloom around it
+    var sp = sprite(u.pose, u.team, h, u.facing < 0, true), p = w2s(u.x, u.y);
+    x.save(); x.translate(p.x, p.y); x.scale(z, z); x.globalAlpha = heat * 0.95; x.drawImage(sp.cv, sp.ox, sp.oy, sp.w, sp.h); x.restore(); x.globalAlpha = 1;
+    blob(u.x, u.y - h * 0.45, h * 0.42, h * 0.58, heat * 0.4);
+  });
+  G.rounds.forEach(function (r) { blob(r.x, r.y, 9, 9, 1); });
+  G.proj.forEach(function (p) { blob(p.x, p.y, p.kind === 'rocket' ? 22 : 12, p.kind === 'rocket' ? 22 : 12, 1); });
+  G.fx.forEach(function (f) {
+    var life = clamp(1 - f.t / f.dur, 0, 1);
+    if (f.k === 'boom') blob(f.x, f.y - 10, f.r * (0.6 + 0.6 * (1 - life)), f.r * (0.45 + 0.4 * (1 - life)), life);
+    else if (f.k === 'muzzle') blob(f.x, f.y, 26, 26, life);
+    else if (f.k === 'scorch') blob(f.x, f.y, f.r, f.r * 0.6, 0.35 * life);
+    else if (f.k === 'flame' || f.k === 'cone') blob(f.x, f.y, 40, 30, 0.9 * life);
+    else if (f.k === 'impact') blob(f.x, f.y, 14, 14, 0.8 * life);
+  });
+  x.globalCompositeOperation = 'source-over';
+  ctx = main;
+  if (T.prof) { T.prof.blobs = performance.now() - _t0 - T.prof.scene; _t0 = performance.now(); }
+  var img = x.getImageData(0, 0, tw, th), d = img.data, L = T.lut, n = d.length, seed = T.seed | 0;
+  for (var i = 0; i < n; i += 4) {
+    seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+    var lum = ((d[i] * 77 + d[i + 1] * 151 + d[i + 2] * 28) >> 8) + ((seed & 15) - 7);
+    lum = lum < 0 ? 0 : lum > 255 ? 255 : lum;
+    var j = lum * 3; d[i] = L[j]; d[i + 1] = L[j + 1]; d[i + 2] = L[j + 2];
+  }
+  T.seed = seed || 1;
+  x.putImageData(img, 0, 0);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = amt; ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(T.cv, 0, 0, sw, sh);
+  ctx.globalAlpha = 1; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (T.prof) T.prof.map = performance.now() - _t0;
 }
 function postProcess() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  if (blendOK.overlay) { ctx.globalCompositeOperation = 'overlay'; ctx.fillStyle = 'rgba(255,214,150,0.2)'; ctx.fillRect(0, 0, VW, VH); }
+  var therm = (G && G.thermal) || 0;
+  if (blendOK.overlay && therm < 1) { ctx.globalCompositeOperation = 'overlay'; ctx.fillStyle = 'rgba(255,214,150,' + (0.2 * (1 - therm)) + ')'; ctx.fillRect(0, 0, VW, VH); }
   ctx.globalCompositeOperation = blendOK.overlay ? 'overlay' : 'source-over';
-  ctx.globalAlpha = blendOK.overlay ? 0.07 : 0.03;
+  ctx.globalAlpha = (blendOK.overlay ? 0.07 : 0.03) + therm * 0.1;
   var ox = -Math.floor(Math.random() * 192), oy = -Math.floor(Math.random() * 192);
   ctx.save(); ctx.translate(ox, oy); var gp = ctx.createPattern(grainCv, 'repeat'); ctx.fillStyle = gp; ctx.fillRect(-ox, -oy, VW + 192, VH + 192); ctx.restore();
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   var cx = viewCX(), cy = VH / 2;
+  if (therm > 0) {
+    if (!THERM.scan) { THERM.scan = document.createElement('canvas'); THERM.scan.width = 4; THERM.scan.height = 3; var sc = THERM.scan.getContext('2d'); sc.fillStyle = 'rgba(0,0,0,0.5)'; sc.fillRect(0, 2, 4, 1); }
+    ctx.globalAlpha = therm * 0.7; ctx.fillStyle = ctx.createPattern(THERM.scan, 'repeat'); ctx.fillRect(0, 0, VW, VH);
+    ctx.globalAlpha = therm * (0.02 + Math.random() * 0.03); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, VW, VH);
+    ctx.globalAlpha = 1;
+    var tg = ctx.createRadialGradient(cx, cy, Math.min(VW, VH) * 0.3, cx, cy, Math.max(VW, VH) * 0.72);
+    tg.addColorStop(0, 'rgba(0,0,0,0)'); tg.addColorStop(1, 'rgba(0,0,0,' + (0.55 * therm) + ')');
+    ctx.fillStyle = tg; ctx.fillRect(0, 0, VW, VH);
+    var m = 18, len = 34; ctx.strokeStyle = 'rgba(255,255,255,' + (0.55 * therm) + ')'; ctx.lineWidth = 2;
+    [[m, m, 1, 1], [VW - m, m, -1, 1], [m, VH - m, 1, -1], [VW - m, VH - m, -1, -1]].forEach(function (c) { ctx.beginPath(); ctx.moveTo(c[0], c[1] + c[3] * len); ctx.lineTo(c[0], c[1]); ctx.lineTo(c[0] + c[2] * len, c[1]); ctx.stroke(); });
+  }
   var vg = ctx.createRadialGradient(cx, cy, Math.min(VW, VH) * 0.45, cx, cy, Math.max(VW, VH) * 0.8);
   vg.addColorStop(0, 'rgba(10,12,8,0)'); vg.addColorStop(1, 'rgba(10,12,8,0.42)');
   ctx.fillStyle = vg; ctx.fillRect(0, 0, VW, VH);
@@ -233,56 +291,13 @@ function drawCrate(x, y) {
   ctx.strokeStyle = '#8F9196'; ctx.lineWidth = 2; rrect(ctx, x - 18, y - 30, 36, 38, 4); ctx.stroke();
   ctx.fillStyle = '#D32F2F'; ctx.fillRect(x - 10, y - 14, 20, 6); ctx.fillRect(x - 3, y - 21, 6, 20);
 }
-function drawProp(p) {
-  ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ell(ctx, p.x + 8, p.y + 6, p.r + 8, p.r * 0.45); ctx.fill();
-  if (p.kind === 'wall') {
-    var L = p.len; ctx.save(); laneSkew(ctx, p.x, p.y);
-    ctx.fillStyle = '#CDB27A'; ctx.fillRect(-L / 2, -40, L, 40);
-    ctx.fillStyle = '#DCC48E'; ctx.fillRect(-L / 2, -48, L, 10);
-    for (var i = 0; i < 6; i++) { ctx.fillStyle = '#DCC48E'; ctx.fillRect(-L / 2 + 6 + i * (L / 6), -62, L / 6 - 10, 16); ctx.strokeStyle = '#8E7443'; ctx.lineWidth = 1.5; ctx.strokeRect(-L / 2 + 6 + i * (L / 6), -62, L / 6 - 10, 16); }
-    ctx.strokeStyle = '#8E7443'; ctx.lineWidth = 2; ctx.strokeRect(-L / 2, -48, L, 48);
-    ctx.fillStyle = 'rgba(80,60,30,0.2)'; for (var k = 0; k < 20; k++) { ell(ctx, -L / 2 + 10 + (k * 37) % L, -34 + (k * 13) % 26, 3, 2); ctx.fill(); }
-    ctx.restore();
-  } else if (p.kind === 'jeep') {
-    ctx.save(); laneSkew(ctx, p.x, p.y);
-    ctx.fillStyle = '#222'; [-34, 30].forEach(function (x) { ell(ctx, x, -8, 15, 13); ctx.fill(); ctx.fillStyle = '#9A9A9A'; ell(ctx, x, -8, 7, 6); ctx.fill(); ctx.fillStyle = '#222'; });
-    ctx.fillStyle = '#F2B600'; rrect(ctx, -54, -48, 76, 36, 4); ctx.fill(); ctx.strokeStyle = '#8A6500'; ctx.lineWidth = 2; rrect(ctx, -54, -48, 76, 36, 4); ctx.stroke();
-    ctx.fillStyle = '#F2B600'; rrect(ctx, 20, -40, 34, 30, 4); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#9AD3F5'; ctx.fillRect(26, -36, 18, 12);
-    ctx.fillStyle = '#D9A300'; ctx.fillRect(-50, -70, 68, 24); ctx.strokeStyle = '#8A6500'; ctx.strokeRect(-50, -70, 68, 24);
-    ctx.fillStyle = '#E3CB93'; ell(ctx, -16, -72, 30, 10); ctx.fill();
-    ctx.restore();
-  } else if (p.kind === 'cart') {
-    ctx.save(); laneSkew(ctx, p.x, p.y); ctx.rotate(-0.1);
-    ctx.fillStyle = '#1E6BB5'; ctx.fillRect(-52, -14, 70, 8); ctx.strokeStyle = '#0D3F70'; ctx.lineWidth = 2; ctx.strokeRect(-52, -14, 70, 8);
-    ctx.fillStyle = '#F44336'; ctx.beginPath(); ctx.moveTo(18, -24); ctx.lineTo(56, -22); ctx.lineTo(54, 6); ctx.lineTo(20, 4); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#8E1F17'; ctx.stroke();
-    ctx.fillStyle = '#1E6BB5'; ctx.fillRect(-60, -20, 10, 20);
-    ctx.restore();
-  } else {
-    // toy bucket
-    ctx.save(); ctx.translate(p.x, p.y);
-    ctx.fillStyle = '#D32F2F'; ctx.beginPath(); ctx.moveTo(-24, -44); ctx.lineTo(24, -44); ctx.lineTo(30, 0); ctx.lineTo(-30, 0); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#7B1F1F'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = '#EF5350'; ell(ctx, 0, -44, 24, 8); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#E3CB93'; ell(ctx, 0, -46, 18, 5); ctx.fill();
-    ctx.strokeStyle = '#F5F5F5'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, -44, 26, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(-18, -40, 6, 36);
-    ctx.restore();
-  }
-  ctx.restore();
-}
 function drawThicket(b, i) {
   var inside = G.player && !G.player.dead && inBrush(G.player) === i;
-  ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(LANG); ctx.globalAlpha = inside ? 0.45 : 0.95;
-  var R = seeded(31 + i);
-  for (var k = 0; k < 26; k++) {
-    var x = (R() - 0.5) * b.rx * 1.7, y = (R() - 0.5) * b.ry * 1.5, hgt = 34 + R() * 30;
-    ctx.strokeStyle = R() < 0.5 ? '#4E9A2E' : '#6BBE3A'; ctx.lineWidth = 4; ctx.lineCap = 'round';
-    for (var q = -1; q <= 1; q++) { ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + q * 10, y - hgt * 0.6, x + q * 22, y - hgt); ctx.stroke(); }
-    if (R() < 0.25) { ctx.fillStyle = '#F2D53C'; ell(ctx, x + 4, y - hgt - 4, 6, 6); ctx.fill(); }
-  }
-  ctx.lineCap = 'butt';
+  ctx.save(); ctx.translate(b.x, b.y);
+  var g = ctx.createRadialGradient(0, 0, 0, 0, 0, b.rx);
+  g.addColorStop(0, inside ? 'rgba(120,220,90,0.22)' : 'rgba(90,190,70,0.16)'); g.addColorStop(1, 'rgba(90,190,70,0)');
+  ctx.save(); ctx.scale(1, b.ry / b.rx); ctx.fillStyle = g; ell(ctx, 0, 0, b.rx, b.rx); ctx.fill(); ctx.restore();
+  ctx.strokeStyle = inside ? 'rgba(200,255,170,0.9)' : 'rgba(150,230,110,0.45)'; ctx.lineWidth = inside ? 3 : 2; ctx.setLineDash([10, 8]); ell(ctx, 0, 0, b.rx, b.ry); ctx.stroke(); ctx.setLineDash([]);
   ctx.restore();
 }
 function sandTower(x, y, r, h, dead, C) {
@@ -298,45 +313,24 @@ function sandTower(x, y, r, h, dead, C) {
 function drawStruct(s) {
   ctx.save(); ctx.translate(s.x, s.y);
   var C = TEAMC[s.team], dead = s.dead, rec = s.recoilT > 0 ? s.recoilT * 20 : 0;
-  ctx.fillStyle = 'rgba(0,0,0,0.22)'; ell(ctx, 6, 8, s.r + 24, (s.r + 24) * 0.42); ctx.fill();
   if (s.kind === 'outpost') {
+    ctx.scale(1.4, 1.4);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ell(ctx, 6, 8, s.r + 24, (s.r + 24) * 0.42); ctx.fill();
     ctx.fillStyle = 'rgba(120,95,50,0.3)'; ell(ctx, 0, 0, 74, 34); ctx.fill();
     sandTower(0, 0, 44, 46, dead, C);
-    if (!dead) { var sp = sprite('gunner', s.team, 70, s.team === 1); ctx.drawImage(sp.cv, -sp.w / 2 - (s.team === 1 ? -rec : rec), -46 - sp.h * 0.9, sp.w, sp.h); }
+    if (!dead) { var sp = sprite('gunner', s.team, 70, s.team === 1); ctx.drawImage(sp.cv, sp.ox - (s.team === 1 ? -rec : rec), -40 + sp.oy, sp.w, sp.h); }
     if (s.flashT > 0 && !dead) { ctx.globalAlpha = s.flashT / 0.08 * 0.6; ctx.fillStyle = '#fff'; ctx.fillRect(-46, -60, 92, 60); ctx.globalAlpha = 1; }
-  } else if (s.kind === 'depot') {
-    if (dead) { ctx.fillStyle = '#1E6BB5'; ctx.save(); ctx.rotate(1.2); rrect(ctx, -22, -40, 44, 44, 6); ctx.fill(); ctx.restore(); ctx.fillStyle = '#D9C086'; ell(ctx, 30, 4, 40, 14); ctx.fill(); }
-    else {
-      ctx.fillStyle = '#1E6BB5'; ctx.beginPath(); ctx.moveTo(-30, -66); ctx.lineTo(30, -66); ctx.lineTo(38, 0); ctx.lineTo(-38, 0); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#0D3F70'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = '#4A90D9'; ell(ctx, 0, -66, 30, 9); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(-24, -60, 7, 56);
-      ctx.fillStyle = '#7E7148'; rrect(ctx, -78, -24, 26, 24, 3); ctx.fill(); rrect(ctx, 52, -22, 24, 22, 3); ctx.fill(); rrect(ctx, -70, -46, 22, 22, 3); ctx.fill(); ctx.strokeStyle = '#3A3220'; rrect(ctx, -78, -24, 26, 24, 3); ctx.stroke(); rrect(ctx, 52, -22, 24, 22, 3); ctx.stroke(); rrect(ctx, -70, -46, 22, 22, 3); ctx.stroke();
-      ctx.fillStyle = '#F5F5F5'; ctx.font = '400 10px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('SUPPLY', 0, -30);
-    }
-  } else if (s.team === 0) {
-    // sandcastle fort
-    if (dead) ctx.rotate(0.08);
-    ctx.fillStyle = 'rgba(120,95,50,0.3)'; ell(ctx, 0, 4, 150, 62); ctx.fill();
-    ctx.fillStyle = dead ? '#C9B07A' : '#D9C086'; ctx.fillRect(-100, -70, 200, 70); ctx.strokeStyle = '#A48A55'; ctx.lineWidth = 2; ctx.strokeRect(-100, -70, 200, 70);
-    ctx.fillStyle = 'rgba(120,90,40,0.18)'; ctx.fillRect(60, -70, 40, 70);
-    for (var i = 0; i < 7; i++) { ctx.fillStyle = dead ? '#C9B07A' : '#DCC48E'; ctx.fillRect(-96 + i * 30, -84, 18, 14); ctx.strokeRect(-96 + i * 30, -84, 18, 14); }
-    [[-92, 40, 120], [92, 40, 120], [-30, 30, 92], [30, 30, 92]].forEach(function (t) { sandTower(t[0], 0, t[1], t[2], dead, C); });
-    ctx.fillStyle = '#4A3A26'; ctx.fillRect(-18, -44, 36, 44);
-    if (!dead) { ctx.fillStyle = '#F5F5F5'; ctx.font = '400 15px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('FORT', 0, -54); }
-    if (s.flashT > 0 && !dead) { ctx.globalAlpha = s.flashT / 0.08 * 0.5; ctx.fillStyle = '#fff'; ctx.fillRect(-130, -160, 260, 160); ctx.globalAlpha = 1; }
   } else {
-    // overturned bucket bunker
-    if (dead) ctx.rotate(-0.12);
-    ctx.fillStyle = 'rgba(120,95,50,0.3)'; ell(ctx, 0, 4, 140, 58); ctx.fill();
-    ctx.fillStyle = dead ? '#C9B07A' : '#D9C086'; ell(ctx, 0, 0, 120, 44); ctx.fill();
-    ctx.fillStyle = dead ? '#8E1F17' : '#D32F2F'; ctx.beginPath(); ctx.moveTo(-70, 0); ctx.lineTo(70, 0); ctx.lineTo(60, -120); ctx.lineTo(-60, -120); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#7B1F1F'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = dead ? '#A52A20' : '#EF5350'; ell(ctx, 0, -120, 60, 18); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(-52, -110, 10, 100);
-    ctx.fillStyle = '#12110D'; ctx.fillRect(-26, -56, 52, 16);
-    for (var k = -4; k <= 4; k++) { if (Math.abs(k) < 2) continue; sandbagS(k * 26, 6, dead); }
-    if (dead) { ctx.strokeStyle = '#4A1010'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-30, -118); ctx.lineTo(-6, -70); ctx.lineTo(-24, -20); ctx.stroke(); }
-    ctx.fillStyle = '#F5F5F5'; ctx.font = '400 15px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('BUNKER', 0, -74);
-    if (s.flashT > 0 && !dead) { ctx.globalAlpha = s.flashT / 0.08 * 0.5; ctx.fillStyle = '#fff'; ctx.fillRect(-120, -140, 240, 150); ctx.globalAlpha = 1; }
+    // the painted fort is the HQ: smoke, scorch and a flag when alive; rubble tint and a toppled flag when it falls
+    if (!dead) {
+      if (s.flashT > 0) { ctx.globalAlpha = s.flashT / 0.08 * 0.35; ctx.fillStyle = '#fff'; ell(ctx, 0, -40, 130, 90); ctx.fill(); ctx.globalAlpha = 1; }
+      var hpf = s.hp / s.maxHp;
+      if (hpf < 0.6) { ctx.fillStyle = 'rgba(40,30,20,' + (0.35 * (1 - hpf)) + ')'; ell(ctx, 0, -20, 120, 70); ctx.fill(); }
+    } else {
+      ctx.fillStyle = 'rgba(30,22,14,0.55)'; ell(ctx, 0, -20, 150, 90); ctx.fill();
+      ctx.strokeStyle = '#2A2118'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-90, -70); ctx.lineTo(60, 40); ctx.moveTo(-40, 50); ctx.lineTo(80, -60); ctx.stroke();
+      ctx.fillStyle = '#F5F5F5'; ctx.font = '400 18px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('FORT FALLEN', 0, -110);
+    }
   }
   ctx.restore();
 }
@@ -367,8 +361,8 @@ function drawUnit(u) {
   if (veh) drawVehicle(u);
   else {
     var sp = sprite(u.pose, u.team, h, u.facing < 0);
-    ctx.drawImage(sp.cv, -sp.w / 2, -h * 226 / 240, sp.w, h);
-    if (u.flashT > 0 && !u.dead) { var fs = sprite(u.pose, u.team, h, u.facing < 0, true); ctx.globalAlpha = alpha * (u.flashT / 0.08) * 0.85; ctx.drawImage(fs.cv, -sp.w / 2, -h * 226 / 240, sp.w, h); ctx.globalAlpha = alpha; }
+    ctx.drawImage(sp.cv, sp.ox, sp.oy, sp.w, sp.h);
+    if (u.flashT > 0 && !u.dead) { var fs = sprite(u.pose, u.team, h, u.facing < 0, true); ctx.globalAlpha = alpha * (u.flashT / 0.08) * 0.85; ctx.drawImage(fs.cv, sp.ox, sp.oy, sp.w, sp.h); ctx.globalAlpha = alpha; }
   }
   if (u.shield > 0 && !u.dead) { ctx.strokeStyle = 'rgba(214,203,170,0.7)'; ctx.lineWidth = 3; ell(ctx, 0, -h * 0.45, 40, h * 0.6); ctx.stroke(); }
   if (u.burnT > 0 && !u.dead && Math.random() < 0.4) addFx({ k: 'flame', x: u.x + rnd(-12, 12), y: u.y - rnd(10, 60), t: 0, dur: 0.3 });
@@ -378,6 +372,19 @@ function drawUnit(u) {
 }
 function drawVehicle(u) {
   var C = TEAMC[u.team], f = u.facing;
+  var art = heroArt('m_' + u.type, u.team);
+  if (art) {
+    // illustrated toy vehicle: about as long as a soldier is tall
+    var vw = u.type === 'tank' ? 150 : 140, vh = vw * art.height / art.width, sp = sprite('m_' + u.type, u.team, vh, f < 0, false);
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ell(ctx, 0, 6, vw * 0.48, vw * 0.16); ctx.fill();
+    if (u.dead) ctx.globalAlpha *= 0.85;
+    ctx.drawImage(sp.cv, sp.ox, sp.oy + 2, sp.w, sp.h);
+    if (u.dead) { ctx.globalCompositeOperation = 'source-atop'; ctx.fillStyle = 'rgba(20,16,10,0.55)'; ctx.fillRect(sp.ox, sp.oy, sp.w, sp.h); ctx.globalCompositeOperation = 'source-over'; }
+    if (u.flashT > 0 && !u.dead) { var fs = sprite('m_' + u.type, u.team, vh, f < 0, true); ctx.globalAlpha = u.flashT / 0.08 * 0.7; ctx.drawImage(fs.cv, sp.ox, sp.oy + 2, sp.w, sp.h); ctx.globalAlpha = 1; }
+    if (u.dead && Math.random() < 0.3) addFx({ k: 'smoke', x: u.x + rnd(-10, 10), y: u.y - 30, t: 0, dur: 1.2, big: 1 });
+    ctx.restore(); return;
+  }
   ctx.save(); ctx.scale(f, 1);
   if (u.dead) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; }
   ctx.fillStyle = 'rgba(0,0,0,0.25)'; ell(ctx, 0, 4, 40, 10); ctx.fill();
@@ -488,11 +495,9 @@ function drawAim(u, slot) {
 function drawMini() {
   var W = mini.width, H = mini.height, sx = W / MAP.W, sy = H / MAP.H;
   mctx.fillStyle = '#071A0B'; mctx.fillRect(0, 0, W, H);
+  if (ASSETS.miniCv) { mctx.globalAlpha = 0.9; mctx.drawImage(ASSETS.miniCv, 0, 0, W, H); mctx.globalAlpha = 1; }
   mctx.save(); mctx.scale(sx, sy);
-  mctx.save(); mctx.translate(LCX, LCY); mctx.rotate(LANG);
-  mctx.fillStyle = '#1E4D22'; mctx.fillRect(SAND.L0 - 60, -SAND.H - 60, SAND.L1 - SAND.L0 + 120, SAND.H * 2 + 120);
-  mctx.fillStyle = '#5C5A2A'; mctx.fillRect(SAND.L0, -SAND.H, SAND.L1 - SAND.L0, SAND.H * 2);
-  mctx.restore();
+  BRUSH.forEach(function (b) { mctx.fillStyle = 'rgba(120,230,90,0.35)'; ell(mctx, b.x, b.y, b.rx, b.ry); mctx.fill(); });
   G.structs.forEach(function (s) { mctx.fillStyle = s.dead ? '#3A3A30' : s.team === MYTEAM ? '#5BD66B' : '#F0453A'; var z = s.kind === 'hq' ? 76 : 50; mctx.fillRect(s.x - z / 2, s.y - z / 2, z, z); });
   if (G.barrage) G.barrage.beams.forEach(function (b) { if (b.x == null) return; mctx.strokeStyle = '#7EC8FF'; mctx.lineWidth = 10; mctx.beginPath(); mctx.arc(b.x, b.y, G.barrage.r, 0, Math.PI * 2); mctx.stroke(); });
   G.units.forEach(function (u) { if (u.dead || !visibleTo(u, MYTEAM)) return; mctx.fillStyle = u.isPlayer ? '#FFFFFF' : u.team === MYTEAM ? '#5BD66B' : '#F0453A'; var z = u.kind === 'hero' ? 46 : 22; mctx.beginPath(); mctx.arc(u.x, u.y, z / 2, 0, Math.PI * 2); mctx.fill(); });

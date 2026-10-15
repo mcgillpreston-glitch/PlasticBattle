@@ -1,6 +1,6 @@
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 (async () => {
-  const b = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox'] } : {});
+  const b = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox', '--allow-file-access-from-files'] } : {});
   const p = await b.newPage({ viewport: { width: 1440, height: 860 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.goto('file://' + process.argv[2]); await p.waitForTimeout(600);

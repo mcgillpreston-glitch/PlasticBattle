@@ -24,7 +24,8 @@ function enterMatch() {
   var f = fountain(MYTEAM); cam.x = f.x; cam.y = f.y; cam.lock = true;
   aimSlot = null; aMovePending = false; hoverT = null;
   buildAbilityBar(); renderFeed();
-  ALERT.q = []; ALERT.t = 0; ALERT.lastStruct = {}; ALERT.el.hidden = true; if (G) G.hitDirs = [];
+  ALERT.q = []; ALERT.t = 0; ALERT.lastStruct = {}; ALERT.el.hidden = true; if (G) { G.hitDirs = []; G.thermal = 0; G.death = null; }
+  DEATH.el.hidden = true;
 }
 
 function addFx(o) { if (G && G.fx.length < 700) G.fx.push(o); }
@@ -74,10 +75,10 @@ function present(e) {
         playSfx('kill');
       } else if (u && u.team === MYTEAM) showAlert('UNIT LOST', 'bad');
       break;
-    case 'struct': if (e[2] === MYTEAM) showAlert((e[3] === 'hq' ? 'FORT' : e[3] === 'depot' ? 'SUPPLY BUCKET' : 'SAND TURRET') + ' LOST', 'bad'); else showAlert('ENEMY ' + (e[3] === 'hq' ? 'FORT' : e[3] === 'depot' ? 'SUPPLY BUCKET' : 'SAND TURRET') + ' DESTROYED', 'good'); break;
+    case 'struct': var sn = e[3] === 'hq' ? 'FORT' : (['TOP', 'MID', 'BOTTOM'][e[5]] || '') + ' LANE ' + (e[6] === 1 ? 'OUTER' : 'INNER') + ' TURRET'; if (e[2] === MYTEAM) showAlert(sn + ' LOST', 'bad'); else showAlert('ENEMY ' + sn + ' DESTROYED', 'good'); break;
     case 'wave': if (e[1] % 3 === 0) showAlert('REINFORCEMENTS HAVE ARRIVED', 'info'); break;
     case 'sprinkler': showAlert('SPRINKLER ACTIVATED \u00b7 CLEAR THE CENTRE', 'bad'); break;
-    case 'kia': if (isMe(e[1])) { var kb = unitById(e[4]); showAlert('KIA' + (kb ? ' \u00b7 KILLED BY ' + (kb.pname || kb.name).toUpperCase() : '') + ' \u00b7 REINFORCING ' + e[2] + 'S', 'bad'); G.hurtT = 1.2; G.hitDirs = []; } break;
+    case 'kia': if (isMe(e[1])) { showAlert('UNIT LOST', 'bad'); G.hurtT = 1.2; G.hitDirs = []; showDeath(e[2], unitById(e[4]), e[5]); } break;
     case 'lvl': if (isMe(e[1])) { showAlert('PROMOTED TO LEVEL ' + e[2] + (ORDER_LEVELS.indexOf(e[2]) >= 0 ? ' · FIELD ORDERS AT BASE' : ''), 'good'); playSfx('ui'); } break;
     case 'heal': if (isMe(e[1])) { u = unitById(e[1]); if (u) floatText(u.x, u.y - 100, '+' + e[2], '#B8E07A'); playSfx('ui'); } break;
     case 'a':
@@ -105,6 +106,7 @@ function updateVisuals(dt) {
   if (G.hurtT > 0) G.hurtT -= dt;
   if (G.hitDirs) G.hitDirs = G.hitDirs.filter(function (h) { h.t -= dt; return h.t > 0; });
   updateAlerts(dt);
+  updateDeath(dt);
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 28);
   if (G.moveMark) { G.moveMark.t -= dt; if (G.moveMark.t <= 0 || (NET.mode === 'local' && G.player && !G.player.move)) G.moveMark = null; }
   G.feed.forEach(function (f) { f.t -= dt; });
@@ -138,10 +140,65 @@ function visUnit(u, dt) {
   if (u.cone && u.cone.ab && u.cone.ab.dur > 0.1 && Math.random() < 0.9) addFx({ k: 'cone', x: u.x, y: u.y - 30, a: Math.atan2(u.cone.dir.y, u.cone.dir.x), ang: u.cone.ab.ang, r: u.cone.ab.range, t: 0, dur: 0.15, c: u.cone.ab.n === 'Sweep' ? '#FF9A3D' : '#FFE29A' });
 }
 
+/* Death recap: who hurt you, with what, how much; respawn countdown; thermal feed while reinforcing */
+var DEATH = { el: document.getElementById('death'), count: document.getElementById('dCount'), ring: document.getElementById('dRing'), hint: document.getElementById('dHint') };
+var WPN_NAME = { carbine: 'M4 carbine', dmr: 'DMR', sniper: 'Sniper rifle', launcher: 'Rocket launcher', gl: 'Grenade launcher', radio: 'Sidearm', flame: 'Flamethrower', detector: 'Sidearm', mortar: 'Mortar', pistol: 'Pistol', lmg: 'LMG', breacher: 'Breacher', shotgun: 'Shotgun', smg: 'SMG' };
+function weaponLabel(w, kc, src, label) {
+  if (w !== 'aa') return w;
+  if (kc === 'h') return WPN_NAME[(src && WPN[src.pose]) || 'carbine'] || 'Rifle';
+  if (kc === 's') return 'Turret fire';
+  if (kc === 'm') return label === 'Toy tank' ? 'Cannon' : label === 'Jeep' ? 'Mounted MG' : label === 'Mortar crew' ? 'Mortar shell' : 'Rifle fire';
+  return 'Hazard';
+}
+function showDeath(secs, killer, recap) {
+  var p = G.player; if (!p) return;
+  G.death = { total: Math.max(1, secs), x: p.x, y: p.y, t: 0 };
+  var kb = recap && recap.kb, kbSrc = kb ? unitById(kb[0]) : null;
+  var kbRow = kb ? recap.rows.filter(function (r) { return r[0] === kb[0]; })[0] : null;
+  var kname = killer ? (killer.pname || killer.name) : kbRow ? kbRow[2].replace(/ \(.*\)$/, '') : '';
+  var kwp = kb ? weaponLabel(kb[1], kbRow ? kbRow[1] : 'h', kbSrc || killer, kbRow ? kbRow[2] : '') : '';
+  document.getElementById('dKiller').innerHTML = kname ? 'ELIMINATED BY <b></b>' + (kwp ? ' · <span class="wpn"></span>' : '') : 'ELIMINATED';
+  if (kname) { document.querySelector('#dKiller b').textContent = kname.toUpperCase(); var ws = document.querySelector('#dKiller .wpn'); if (ws) ws.textContent = kwp.toUpperCase(); }
+  document.getElementById('dTotal').textContent = recap ? recap.tot : 0;
+  document.getElementById('dWin').textContent = recap && recap.win > 0 ? '· LAST ' + recap.win.toFixed(1) + 'S' : '';
+  var rows = document.getElementById('dRows'); rows.innerHTML = '';
+  if (!recap || !recap.rows.length) { var none = document.createElement('div'); none.className = 'dnone'; none.textContent = 'No damage recorded'; rows.appendChild(none); }
+  else recap.rows.forEach(function (r) {
+    var id = r[0], kc = r[1], label = r[2], team = r[3], amt = r[4], hits = r[5], parts = r[6], src = kc === 'h' ? unitById(id) : null;
+    var d = document.createElement('div'); d.className = 'drow';
+    var side = kc === 'e' ? 'env' : team === MYTEAM ? 'ally' : 'foe';
+    if (src) { var im = document.createElement('img'); im.alt = ''; im.src = portrait(src.pose, src.team); d.appendChild(im); }
+    else { var ic = document.createElement('span'); ic.className = 'ico'; ic.textContent = kc === 's' ? '▲' : kc === 'm' ? '☰' : '≈'; d.appendChild(ic); }
+    var nm = document.createElement('span'); nm.className = 'nm ' + side; nm.textContent = (src ? (src.pname || src.name) : label).toUpperCase();
+    if (kb && kb[0] === id) { var tag = document.createElement('span'); tag.className = 'kb'; tag.textContent = 'KILLING BLOW'; nm.appendChild(tag); }
+    d.appendChild(nm);
+    var wp = document.createElement('span'); wp.className = 'wp';
+    wp.textContent = parts.map(function (pp) { return weaponLabel(pp[0], kc, src, label) + ' ' + pp[1]; }).join(' · ') + ' · ' + hits + (hits === 1 ? ' hit' : ' hits');
+    d.appendChild(wp);
+    var am = document.createElement('span'); am.className = 'amt led'; am.textContent = amt; d.appendChild(am);
+    var bar = document.createElement('span'); bar.className = 'bar'; var fill = document.createElement('i'); fill.className = side; fill.style.width = Math.round(100 * amt / Math.max(1, recap.tot)) + '%'; bar.appendChild(fill); d.appendChild(bar);
+    rows.appendChild(d);
+  });
+  DEATH.el.hidden = false;
+  if (DEATH.el.firstElementChild) { var pn = DEATH.el.firstElementChild; pn.style.animation = 'none'; void pn.offsetWidth; pn.style.animation = ''; }
+}
+function updateDeath(dt) {
+  var p = G.player, dead = !!(p && p.dead && !G.over);
+  G.thermal = clamp((G.thermal || 0) + (dead ? dt / 0.7 : -dt / 0.3), 0, 1);
+  if (!dead) { if (G.death) { G.death = null; DEATH.el.hidden = true; cam.lock = true; } return; }
+  if (!G.death) showDeath(Math.ceil(p.respawn), null, null);
+  var left = Math.max(0, p.respawn || 0);
+  DEATH.count.textContent = Math.ceil(left);
+  DEATH.ring.style.width = (100 * clamp(left / G.death.total, 0, 1)) + '%';
+  var owed = ordersOwed(p);
+  DEATH.hint.textContent = owed > 0 ? 'FIELD ORDERS READY · PRESS O' : '';
+  DEATH.hint.classList.toggle('on', owed > 0);
+}
+
 /* Red Alert style EVA alerts: short, queued, flashing */
 var ALERT = { q: [], t: 0, el: document.getElementById('alert'), lastStruct: {} };
 function showAlert(txt, cls) { if (ALERT.q.length > 3) ALERT.q.shift(); ALERT.q.push({ txt: txt, cls: cls || 'info' }); }
-function alertStruct(s) { var now = G.time; if (ALERT.lastStruct[s.id] != null && now - ALERT.lastStruct[s.id] < 12) return; ALERT.lastStruct[s.id] = now; showAlert((s.kind === 'hq' ? 'FORT' : s.kind === 'depot' ? 'SUPPLY BUCKET' : 'SAND TURRET') + ' UNDER ATTACK', 'bad'); }
+function alertStruct(s) { var now = G.time; if (ALERT.lastStruct[s.id] != null && now - ALERT.lastStruct[s.id] < 12) return; ALERT.lastStruct[s.id] = now; showAlert((s.kind === 'hq' ? 'FORT' : (['TOP', 'MID', 'BOTTOM'][s.lane] || '') + ' LANE TURRET') + ' UNDER ATTACK', 'bad'); }
 function updateAlerts(dt) {
   if (ALERT.t > 0) { ALERT.t -= dt; if (ALERT.t <= 0) { ALERT.el.hidden = true; ALERT.el.className = 'hud'; } return; }
   if (!ALERT.q.length) return;
@@ -158,4 +215,5 @@ function showEnd(winner) {
   document.getElementById('endStats').textContent = 'Match time ' + fmtTime(G.time) + ' · You fought as ' + (p ? p.name : '-') + ' · ' + st.k + ' kills, ' + st.d + ' casualties · Level ' + (p ? p.lvl : '-');
   document.getElementById('again').textContent = NET.mode === 'online' ? 'Back to lobby' : 'Roll call';
   document.getElementById('endModal').hidden = false;
+  DEATH.el.hidden = true; G.death = null;
 }

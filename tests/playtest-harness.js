@@ -9,12 +9,12 @@ function vl(x,y){return Math.sqrt(x*x+y*y);}
 function segPt(px,py,ax,ay,bx,by){var dx=bx-ax,dy=by-ay,L=dx*dx+dy*dy,t=L?((px-ax)*dx+(py-ay)*dy)/L:0;t=t<0?0:t>1?1:t;return vl(px-ax-dx*t,py-ay-dy*t);}
 function surf(b,x,y){ if (b.ax!=null) return segPt(x,y,b.ax,b.ay,b.bx,b.by)-b.r; return vl(x-b.x,y-b.y)-b.r; }
 function ext(b){ return (b.h||0)+b.r; }
-function valid(PF,p,r){ var c=PF.clampLane(p); if (vl(c.x-p.x,c.y-p.y)>0.5) return false; var bl=PF.G.blockers; for (var i=0;i<bl.length;i++) if (surf(bl[i],p.x,p.y)<r+2) return false; return true; }
-function tagOf(PF,b){ if (b.tag) return b.tag; var s=PF.G.structs.find(function(s){return Math.abs(s.x-b.x)<1&&Math.abs(s.y-b.y)<1;}); if (s) return s.kind; var best=null,bd=1e9; PF.PROPS.forEach(function(p){var d=vl(p.x-b.x,p.y-b.y); if(d<bd){bd=d;best=p;}}); return best?best.kind:'?'; }
+function valid(PF,p,r){ if (PF.fieldSD(p.x,p.y)<r+2) return false; var bl=PF.G.blockers; for (var i=0;i<bl.length;i++) if (surf(bl[i],p.x,p.y)<r+2) return false; return true; }
+function tagOf(PF,b){ if (b.tag) return b.tag; var s=PF.G.structs.find(function(s){return Math.abs(s.x-b.x)<1&&Math.abs(s.y-b.y)<1;}); return s?s.kind:'?'; }
 `;
 
 (async () => {
-  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox'] } : {});
+  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox', '--allow-file-access-from-files'] } : {});
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const errors = [];
   page.on('pageerror', e => errors.push('PAGEERROR ' + e.message));
@@ -30,17 +30,27 @@ function tagOf(PF,b){ if (b.tag) return b.tag; var s=PF.G.structs.find(function(
     [14, 22, 28].forEach(function (ur) {
       PF.newGame(3, 1);
       var G = PF.G; PF.opts.god = true; PF.opts.passive = true; PF.opts.pause = true;
-      var blk = G.blockers.slice();
+      var blk = G.blockers.slice(), runs = [];
       blk.forEach(function (b, bi) {
         var tag = tagOf(PF, b);
         for (var a = 0; a < 8; a++) {
           var ang = a * Math.PI / 4, R0 = ext(b) + ur + 30;
           var s = { x: b.x + Math.cos(ang) * R0, y: b.y + Math.sin(ang) * R0 }, g = { x: b.x - Math.cos(ang) * R0, y: b.y - Math.sin(ang) * R0 };
-          s = PF.clampLane(s); g = PF.clampLane(g);
-          if (!valid(PF, s, ur) || !valid(PF, g, ur)) { res.push({ ur: ur, tag: tag, bi: bi, a: a, skip: 1 }); continue; }
+          runs.push({ tag: tag, bi: bi, a: a, s: PF.clampField(s, ur + 2), g: PF.clampField(g, ur + 2) });
+        }
+      });
+      // lane runs: along each lane in steps, and across from one lane to the next at matching progress
+      PF.LANES.forEach(function (L, li) {
+        for (var t = 0.04; t < 0.9; t += 0.12) { runs.push({ tag: 'lane' + li, bi: 100 + li, a: Math.round(t * 100), s: PF.lanePt(t, 0, li), g: PF.lanePt(t + 0.12, 0, li) }); }
+        for (var t2 = 0.3; t2 <= 0.7; t2 += 0.2) { var lj = (li + 1) % 3; runs.push({ tag: 'cross' + li + lj, bi: 200 + li, a: Math.round(t2 * 100), s: PF.lanePt(t2, 0, li), g: PF.lanePt(t2, 0, lj) }); }
+      });
+      runs.forEach(function (run) {
+        var tag = run.tag, bi = run.bi, a = run.a, s = run.s, g = run.g;
+        {
+          if (!valid(PF, s, ur) || !valid(PF, g, ur)) { res.push({ ur: ur, tag: tag, bi: bi, a: a, skip: 1 }); return; }
           G = PF.G; G.units = [G.player]; G.nextWave = 1e9; G.proj = []; G.lobs = []; G.mines = []; G.fx = [];
           var u = G.player; u.r = ur; u.x = s.x; u.y = s.y; u.move = { x: g.x, y: g.y }; u.target = null; u.amove = null; u.buffs = []; u.slowT = 0; u.kvx = u.kvy = 0; u.path = null; u.dash = null; u.dead = false; u.bot = false;
-          var spd = u.spec.spd, straight = vl(g.x - s.x, g.y - s.y), limit = straight / spd + 4, t = 0;
+          var spd = u.spec.spd, straight = vl(g.x - s.x, g.y - s.y), limit = straight / spd * (/cross|lane/.test(tag) ? 2.5 : 1) + 4, t = 0;
           for (; t < limit; t += 1 / 30) { PF.update(1 / 30); if (!u.move) break; }
           var miss = vl(u.x - g.x, u.y - g.y);
           res.push({ ur: ur, tag: tag, bi: bi, a: a, ok: miss < 40, time: t, ideal: straight / spd, miss: Math.round(miss), sx: s.x, sy: s.y, ex: u.x, ey: u.y });
@@ -75,8 +85,8 @@ function tagOf(PF,b){ if (b.tag) return b.tag; var s=PF.G.structs.find(function(
             var h = k.hist, isStuck = h.length === 5 && h.every(function (e) { return e.want; }) && vl(h[4].x - h[0].x, h[4].y - h[0].y) < 8;
             if (isStuck && !k.stuck) {
               var bl = G.blockers, nb = null, nd = 1e9; bl.forEach(function (b) { var d = surf(b, u.x, u.y) - u.r; if (d < nd) { nd = d; nb = b; } });
-              var q = PF.laneProj(u), crowd = G.units.filter(function (o) { return o !== u && !o.dead && vl(o.x - u.x, o.y - u.y) < o.r + u.r + 6; }).length;
-              var cause = nd < 8 ? 'obstacle:' + tagOf(PF, nb) : Math.abs(q.off) > 180 ? 'lane edge' : crowd >= 2 ? 'crowd' : 'other';
+              var q = PF.laneProj(u, PF.nearestLane(u)), crowd = G.units.filter(function (o) { return o !== u && !o.dead && vl(o.x - u.x, o.y - u.y) < o.r + u.r + 6; }).length;
+              var cause = nd < 8 ? 'obstacle:' + tagOf(PF, nb) : PF.fieldSD(u.x, u.y) < u.r + 6 ? 'field edge' : crowd >= 2 ? 'crowd' : 'other';
               k.stuck = { t0: h[0].t, x: u.x, y: u.y, lt: q.t, off: q.off, kind: u.kind === 'hero' ? 'hero' : 'minion:' + u.type, cause: cause, team: u.team, goal: u.target ? 'target' : 'move' };
             } else if (!isStuck && k.stuck) { k.stuck.dur = G.time - k.stuck.t0; EV.push(k.stuck); k.stuck = null; }
           });
@@ -95,7 +105,9 @@ function tagOf(PF,b){ if (b.tag) return b.tag; var s=PF.G.structs.find(function(
     var G = PF.G, MAP = PF.MAP, S = 0.5, c = document.createElement('canvas'); c.width = MAP.W * S; c.height = MAP.H * S;
     var x = c.getContext('2d'); x.scale(S, S);
     x.fillStyle = '#2f3a22'; x.fillRect(0, 0, MAP.W, MAP.H);
-    var A = PF.lanePt(-0.07, 0), B = PF.lanePt(1.07, 0); x.save(); x.translate((A.x + B.x) / 2, (A.y + B.y) / 2); x.rotate(PF.LANG); x.fillStyle = '#6a563a'; var L = vl(B.x - A.x, B.y - A.y); x.fillRect(-L / 2, -MAP.half, L, MAP.half * 2); x.strokeStyle = '#c9b98a'; x.lineWidth = 3; x.setLineDash([12, 8]); x.strokeRect(-L / 2, -(MAP.half - 14), L, 2 * (MAP.half - 14)); x.restore(); x.setLineDash([]);
+    if (PF.ASSETS.map) { x.globalAlpha = 0.5; x.drawImage(PF.ASSETS.map, 0, 0, MAP.W, MAP.H); x.globalAlpha = 1; }
+    x.lineCap = 'round'; PF.FIELD_CAPS.forEach(function (cp) { x.strokeStyle = 'rgba(120,100,60,0.55)'; x.lineWidth = cp.r * 2; x.beginPath(); x.moveTo(cp.ax, cp.ay); x.lineTo(cp.bx, cp.by); x.stroke(); });
+    x.lineCap = 'butt';
     G.blockers.forEach(function (b) { x.fillStyle = 'rgba(200,200,190,0.85)'; x.strokeStyle = '#111'; x.lineWidth = 3; if (b.ax != null) { x.lineCap = 'round'; x.lineWidth = b.r * 2; x.strokeStyle = 'rgba(200,200,190,0.85)'; x.beginPath(); x.moveTo(b.ax, b.ay); x.lineTo(b.bx, b.by); x.stroke(); x.lineWidth = 3; } else { x.beginPath(); x.arc(b.x, b.y, b.r, 0, 7); x.fill(); x.stroke(); } });
     course.forEach(function (r) { if (r.skip || r.ok) return; x.strokeStyle = '#ffcc33'; x.lineWidth = 3; x.beginPath(); x.moveTo(r.sx, r.sy); x.lineTo(r.ex, r.ey); x.stroke(); x.fillStyle = '#ffcc33'; x.beginPath(); x.arc(r.ex, r.ey, 9, 0, 7); x.fill(); });
     events.forEach(function (e) { var big = Math.min(26, 6 + e.dur * 4); x.fillStyle = e.kind === 'hero' ? 'rgba(255,60,40,0.75)' : 'rgba(80,170,255,0.7)'; x.beginPath(); x.arc(e.x, e.y, big, 0, 7); x.fill(); });

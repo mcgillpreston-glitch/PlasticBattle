@@ -10,12 +10,13 @@ const { createSim } = require('./sim');
 
 const PORT = Number(process.env.PORT) || 8080;
 const INDEX = path.join(__dirname, '..', 'index.html');
+const ASSETS = path.join(__dirname, '..', 'assets');
 const TICK_MS = 50;            // 20 snapshots per second
 const SUBSTEPS = 2;            // 40 Hz simulation
 const MAX_ROOMS = 200;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const SLOTS = ['Q', 'W', 'E', 'R', 'D', 'F'];
-const KCODE = { melee: 1, rifle: 2, tank: 3, jeep: 4 };
+const KCODE = { melee: 1, rifle: 2, tank: 3, jeep: 4, mortar: 5 };
 const PCODE = { shot: 0, bullet: 1, rocket: 2, jack: 3 };
 const HERO_COUNT = 16;
 
@@ -40,6 +41,18 @@ const server = http.createServer((req, res) => {
     if (!indexHtml) { res.writeHead(500); res.end('index.html missing: run node build.js'); return; }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' });
     res.end(indexHtml); return;
+  }
+  if (url.startsWith('/assets/') && !url.includes('..')) {
+    // the painted map and the soldier illustrations; immutable files, so let browsers cache them for a week
+    const file = path.join(ASSETS, url.slice('/assets/'.length).split('?')[0]);
+    const type = file.endsWith('.webp') ? 'image/webp' : file.endsWith('.png') ? 'image/png' : file.endsWith('.jpg') ? 'image/jpeg' : null;
+    if (type && file.startsWith(ASSETS)) {
+      fs.readFile(file, (err, data) => {
+        if (err) { res.writeHead(404, { 'content-type': 'text/plain' }); res.end('not found'); return; }
+        res.writeHead(200, { 'content-type': type, 'cache-control': 'public, max-age=604800', 'x-content-type-options': 'nosniff' }); res.end(data);
+      });
+      return;
+    }
   }
   res.writeHead(404, { 'content-type': 'text/plain' }); res.end('not found');
 });
@@ -257,6 +270,14 @@ function onGameCmd(p, m) {
     case 'aim': { const x = num(m.x, -1000, 5000), y = num(m.y, -1000, 4000); if (x != null && y != null) u.aimPt = { x, y }; break; }
     case 'halt': u.move = null; u.target = null; u.amove = null; break;
     case 'dbg_win': if (process.env.PF_DEBUG === '1') G.structs.filter(s => s.team !== u.team).sort((a, b) => a.order - b.order).forEach(s => C.kill(u, s)); break;
+    case 'dbg_die': {
+      // test only: an enemy hero and a turret hit this player hard enough to kill them, so the death recap can be checked end to end
+      if (process.env.PF_DEBUG !== '1' || u.dead) return;
+      const foe = G.units.find(x => x.kind === 'hero' && x.team !== u.team && !x.dead), tur = G.structs.find(s => s.team !== u.team && s.kind === 'outpost' && !s.dead);
+      if (tur) C.damage(tur, u, 120, {});
+      if (foe) { C.damage(foe, u, 90, { ability: 1, n: 'Frag' }); C.damage(foe, u, 1e6, { aa: 1 }); }
+      break;
+    }
     case 'orders': if (C.ordersOwed(u) > 0 && C.atBase(u) && !u.offer) C.rollOffer(u); break;
     case 'pick': {
       const i = num(m.i, 0, 2); if (i == null || !u.offer || C.ordersOwed(u) <= 0 || !C.atBase(u)) return;
