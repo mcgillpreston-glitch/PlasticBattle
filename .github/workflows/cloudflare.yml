@@ -1,0 +1,31 @@
+# Deploys the game to Cloudflare Workers (static site + Durable Object rooms) with wrangler.
+# Needs two repository secrets (Settings -> Secrets and variables -> Actions):
+#   CLOUDFLARE_API_TOKEN   an API token made from the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID  shown on the Workers & Pages overview page of the Cloudflare dashboard
+name: Deploy to Cloudflare
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: cloudflare-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the page, the worker's sim module and dist/
+        run: node build.js
+      - name: Check the worker bundles
+        run: npx --yes esbuild@0.24.2 worker/index.js --bundle --format=esm --platform=neutral --outfile=/tmp/worker-check.js && ls -la /tmp/worker-check.js
+      - name: Deploy with wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
