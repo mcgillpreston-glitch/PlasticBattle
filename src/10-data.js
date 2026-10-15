@@ -223,22 +223,31 @@ function laneOf(u) { return u.lane != null ? u.lane : nearestLane(u); }
 function fountain(team) { return FOUNT[team]; }
 function progress(u) { var t = laneProj(u, laneOf(u)).t; return u.team === 0 ? t : 1 - t; }
 
-/* Turrets: three per lane per team (outer, middle, inner), each a pillbox. Where the painting has a sand tower or a sandbag gun nest near the
-   slot, the turret sits inside that emplacement (painted: true, so only the gun, flag and damage are drawn over it); elsewhere a pillbox is drawn. */
-var PAINTED_NESTS = [
-  { team: 0, x: 960, y: 440, kind: 'nest' }, { team: 0, x: 770, y: 880, kind: 'tower' }, { team: 0, x: 1370, y: 1140, kind: 'nest' }, { team: 0, x: 1700, y: 1870, kind: 'tower' },
-  { team: 1, x: 2350, y: 145, kind: 'tower' }, { team: 1, x: 2100, y: 1180, kind: 'tower' }, { team: 1, x: 2870, y: 730, kind: 'nest' }, { team: 1, x: 3010, y: 1330, kind: 'nest' }
-];
+/* Turrets: three per lane per team (outer, middle, inner), each a sandbag pillbox. Every turret sits at the same lane position for both teams,
+   mirrored along the lane (green 0.42 / 0.30 / 0.17, tan 0.58 / 0.70 / 0.83) and on the same side of the lane, so the two forts line up. */
 var STRUCT_DEF = [];
 LANES.forEach(function (L) {
-  [[0, 0.42, 1], [0, 0.3, 2], [0, 0.17, 3], [1, 0.58, 1], [1, 0.7, 2], [1, 0.83, 3]].forEach(function (d) {
-    var side = L.name === 'top' ? 1 : L.name === 'bot' ? -1 : (d[2] % 2 ? 1 : -1);
-    var q = lanePt(d[1], 0, L.i), q2 = lanePt(d[1] + 0.002, 0, L.i), dx = q2.x - q.x, dy = q2.y - q.y, len = vlen(dx, dy) || 1;
-    var r = 0; L.pts.forEach(function (p, i) { if (L.cum[i] <= d[1] * L.len) r = p.r; });
-    var x = Math.round(q.x - dy / len * side * (r + 64)), y = Math.round(q.y + dx / len * side * (r + 64)), painted = null;
-    PAINTED_NESTS.forEach(function (n) { if (n.team === d[0] && !n.used && vlen(n.x - q.x, n.y - q.y) < 300 && (!painted || vlen(n.x - q.x, n.y - q.y) < vlen(painted.x - q.x, painted.y - q.y))) painted = n; });
-    if (painted) { painted.used = true; x = painted.x; y = painted.y; }
-    STRUCT_DEF.push({ team: d[0], lane: L.i, kind: 'outpost', order: d[2], x: x, y: y, t: d[1], painted: painted ? painted.kind : null });
+  // one offset per lane slot, shared by both teams, so the two forts match; moved in toward the spine until both spots are at least 24 units inside the walkable field
+  [[1, 0.42, 0.58], [2, 0.3, 0.7], [3, 0.17, 0.83]].forEach(function (k) {
+    var side0 = L.name === 'top' ? 1 : L.name === 'bot' ? -1 : (k[0] % 2 ? 1 : -1), side = side0;
+    var pos = function (t, off) {
+      var q = lanePt(t, 0, L.i), q2 = lanePt(t + 0.002, 0, L.i), dx = q2.x - q.x, dy = q2.y - q.y, len = vlen(dx, dy) || 1;
+      return { x: Math.round(q.x - dy / len * side * off), y: Math.round(q.y + dx / len * side * off) };
+    };
+    var r = 0; L.pts.forEach(function (p, i) { if (L.cum[i] <= k[1] * L.len) r = p.r; });
+    var off = r + 64, a, b, ok = false;
+    // prefer the usual side and the largest offset; the opposite side is tried only if the usual one has no walkable spot
+    [side0, -side0].some(function (sd) {
+      side = sd;
+      for (off = r + 64; off >= 0; off -= 2) {
+        a = pos(k[1], off); b = pos(k[2], off);
+        if (fieldSD(a.x, a.y) >= 24 && fieldSD(b.x, b.y) >= 24) return (ok = true);
+      }
+      return false;
+    });
+    [[0, k[1], a], [1, k[2], b]].forEach(function (e) {
+      STRUCT_DEF.push({ team: e[0], lane: L.i, kind: 'outpost', order: k[0], x: e[2].x, y: e[2].y, t: e[1], painted: null });
+    });
   });
 });
 STRUCT_DEF.push({ team: 0, lane: -1, kind: 'hq', order: 4, x: 500, y: 1440, t: 0 });
