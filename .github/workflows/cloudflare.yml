@@ -40,7 +40,17 @@ jobs:
           URL: ${{ steps.deploy.outputs.deployment-url }}
         run: |
           echo "Deployed to: $URL" >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "$URL" ]; then
-            gh variable set PF_WORKER_URL --body "$URL" --repo "$GITHUB_REPOSITORY" || true
-            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" -f body="Deployed to Cloudflare: $URL" >/dev/null || true
-          fi
+          if [ -n "$URL" ]; then gh variable set PF_WORKER_URL --body "$URL" --repo "$GITHUB_REPOSITORY" || true; fi
+      - name: Smoke test the live deployment (room API, two players, a match, snapshots)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          sleep 10
+          set +e
+          OUT=$(node tests/smoke-deploy.js "$URL" 2>&1); RC=$?
+          set -e
+          echo "$OUT"
+          printf '%s\n\n```\n%s\n```\n' "Deployed to Cloudflare: $URL" "$OUT" > /tmp/comment.md
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" -F body=@/tmp/comment.md >/dev/null || true
+          exit $RC

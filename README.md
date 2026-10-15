@@ -2,7 +2,7 @@
 
 An all-ARAM, toy-soldier MOBA that runs in the browser. Modern-kit plastic army men fight across a backyard sandbox: one diagonal lane between wooden planks, with sandcastle turrets, toy buckets, a dump truck and the lawn beyond. Combat feedback is modern-shooter style (hitmarkers, damage numbers, damage direction, kill confirms), and the HUD is riveted metal with LED readouts and a radar minimap, in the manner of a classic 90s RTS. Play offline against bots, or online in real time against other people.
 
-**Play:** https://mcgillpreston-glitch.github.io/PlasticBattle/
+**Play:** https://plastic-front.prestonmcgill.workers.dev (Cloudflare, lowest latency) or https://mcgillpreston-glitch.github.io/PlasticBattle/ (GitHub Pages, connects to the same Cloudflare server for online play)
 
 ## Online PvP
 
@@ -36,7 +36,9 @@ npx wrangler login             # once, opens the browser
 npm run deploy:cf              # builds, then deploys worker/ with dist/ as static assets
 ```
 
-The deploy prints the URL, like `https://plastic-front.<your-subdomain>.workers.dev`. Play there directly, or point the GitHub Pages site at it by setting `PF_DEFAULT_SERVER` in `src/70-net.js` to `wss://plastic-front.<your-subdomain>.workers.dev/ws` (or enter that address under **Server** on the online screen; invite links carry it). `npm run dev:cf` runs the same thing locally with `wrangler dev`.
+The deploy prints the URL; ours is `https://plastic-front.prestonmcgill.workers.dev`, and `PF_DEFAULT_SERVER` in `src/70-net.js` points the GitHub Pages site at it (players can enter another address under **Server** on the online screen; invite links carry it). `npm run dev:cf` runs the same thing locally with `wrangler dev`.
+
+**Automatic deploys:** `.github/workflows/cloudflare.yml` runs `wrangler deploy` on every push to `main` (and on demand from the Actions tab). It needs two repository secrets, `CLOUDFLARE_API_TOKEN` (an "Edit Cloudflare Workers" token) and `CLOUDFLARE_ACCOUNT_ID`. After deploying it runs `tests/smoke-deploy.js` against the live URL (room API, two WebSocket players, a match start, snapshot rate, a move, ping) and posts the result as a comment on the deployed commit.
 
 How it maps: `worker/index.js` is the Worker plus two Durable Object classes: `RoomDO` (one per 4-letter code; lobby, the authoritative match at 40 Hz, per-team snapshots at 20 Hz) and `LobbyDO` (a single directory used for quick match and `/status`). The room logic itself is `server/room.js`, shared with the Node server, and the simulation is the same `src/10`, `20`, `30` the browser runs, built into `worker/sim.gen.js`.
 
@@ -108,6 +110,7 @@ worker/index.js            Cloudflare host: the Worker, RoomDO (one per room) an
 wrangler.toml              Cloudflare deploy config (static assets from dist/, Durable Object bindings)
 tests/playtest-harness.js  obstacle course + bot-match stuck detector (offline)
 tests/online-test.js       end-to-end online test with three live browser players (Node host)
+tests/smoke-deploy.js      smoke test against a deployed server URL (used by the Cloudflare workflow)
 tests/worker-test.js       the Worker and Durable Objects driven in Node through runtime shims, including a hibernation wake-up
 tests/visual-check.js      combat and scoreboard screenshots
 tests/death-check.js       death recap, countdown and thermal feed (offline)
