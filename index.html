@@ -763,22 +763,31 @@ function laneOf(u) { return u.lane != null ? u.lane : nearestLane(u); }
 function fountain(team) { return FOUNT[team]; }
 function progress(u) { var t = laneProj(u, laneOf(u)).t; return u.team === 0 ? t : 1 - t; }
 
-/* Turrets: three per lane per team (outer, middle, inner), each a pillbox. Where the painting has a sand tower or a sandbag gun nest near the
-   slot, the turret sits inside that emplacement (painted: true, so only the gun, flag and damage are drawn over it); elsewhere a pillbox is drawn. */
-var PAINTED_NESTS = [
-  { team: 0, x: 960, y: 440, kind: 'nest' }, { team: 0, x: 770, y: 880, kind: 'tower' }, { team: 0, x: 1370, y: 1140, kind: 'nest' }, { team: 0, x: 1700, y: 1870, kind: 'tower' },
-  { team: 1, x: 2350, y: 145, kind: 'tower' }, { team: 1, x: 2100, y: 1180, kind: 'tower' }, { team: 1, x: 2870, y: 730, kind: 'nest' }, { team: 1, x: 3010, y: 1330, kind: 'nest' }
-];
+/* Turrets: three per lane per team (outer, middle, inner), each a sandbag pillbox. Every turret sits at the same lane position for both teams,
+   mirrored along the lane (green 0.42 / 0.30 / 0.17, tan 0.58 / 0.70 / 0.83) and on the same side of the lane, so the two forts line up. */
 var STRUCT_DEF = [];
 LANES.forEach(function (L) {
-  [[0, 0.42, 1], [0, 0.3, 2], [0, 0.17, 3], [1, 0.58, 1], [1, 0.7, 2], [1, 0.83, 3]].forEach(function (d) {
-    var side = L.name === 'top' ? 1 : L.name === 'bot' ? -1 : (d[2] % 2 ? 1 : -1);
-    var q = lanePt(d[1], 0, L.i), q2 = lanePt(d[1] + 0.002, 0, L.i), dx = q2.x - q.x, dy = q2.y - q.y, len = vlen(dx, dy) || 1;
-    var r = 0; L.pts.forEach(function (p, i) { if (L.cum[i] <= d[1] * L.len) r = p.r; });
-    var x = Math.round(q.x - dy / len * side * (r + 64)), y = Math.round(q.y + dx / len * side * (r + 64)), painted = null;
-    PAINTED_NESTS.forEach(function (n) { if (n.team === d[0] && !n.used && vlen(n.x - q.x, n.y - q.y) < 300 && (!painted || vlen(n.x - q.x, n.y - q.y) < vlen(painted.x - q.x, painted.y - q.y))) painted = n; });
-    if (painted) { painted.used = true; x = painted.x; y = painted.y; }
-    STRUCT_DEF.push({ team: d[0], lane: L.i, kind: 'outpost', order: d[2], x: x, y: y, t: d[1], painted: painted ? painted.kind : null });
+  // one offset per lane slot, shared by both teams, so the two forts match; moved in toward the spine until both spots are at least 24 units inside the walkable field
+  [[1, 0.42, 0.58], [2, 0.3, 0.7], [3, 0.17, 0.83]].forEach(function (k) {
+    var side0 = L.name === 'top' ? 1 : L.name === 'bot' ? -1 : (k[0] % 2 ? 1 : -1), side = side0;
+    var pos = function (t, off) {
+      var q = lanePt(t, 0, L.i), q2 = lanePt(t + 0.002, 0, L.i), dx = q2.x - q.x, dy = q2.y - q.y, len = vlen(dx, dy) || 1;
+      return { x: Math.round(q.x - dy / len * side * off), y: Math.round(q.y + dx / len * side * off) };
+    };
+    var r = 0; L.pts.forEach(function (p, i) { if (L.cum[i] <= k[1] * L.len) r = p.r; });
+    var off = r + 64, a, b, ok = false;
+    // prefer the usual side and the largest offset; the opposite side is tried only if the usual one has no walkable spot
+    [side0, -side0].some(function (sd) {
+      side = sd;
+      for (off = r + 64; off >= 0; off -= 2) {
+        a = pos(k[1], off); b = pos(k[2], off);
+        if (fieldSD(a.x, a.y) >= 24 && fieldSD(b.x, b.y) >= 24) return (ok = true);
+      }
+      return false;
+    });
+    [[0, k[1], a], [1, k[2], b]].forEach(function (e) {
+      STRUCT_DEF.push({ team: e[0], lane: L.i, kind: 'outpost', order: k[0], x: e[2].x, y: e[2].y, t: e[1], painted: null });
+    });
   });
 });
 STRUCT_DEF.push({ team: 0, lane: -1, kind: 'hq', order: 4, x: 500, y: 1440, t: 0 });
@@ -2172,7 +2181,7 @@ function makeGrain() {
   grainPat = ctx.createPattern(grainCv, 'repeat');
 }
 /* The battlefield is the painted sandbox (assets/map.webp, one world unit per pixel). ASSETS is filled by loadAssets() before the game starts. */
-var ASSETS = { map: null, miniCv: null, tiles: null };
+var ASSETS = { map: null, miniCv: null, tiles: null, pillGreen: null, pillTan: null };
 /* The map is cut into 512 px tiles at three scales (1, 1/2, 1/4) so a frame draws only the tiles in view, at a size near the zoom level;
    that keeps per-frame pixel work small on any renderer instead of scaling the whole 4K image every frame. */
 var TILE = 512;
@@ -2502,11 +2511,27 @@ function drawStruct(s) {
   }
   ctx.restore();
 }
-/* Turret: a pillbox. Painted towers and nests get only a gun, pennant and damage drawn over the painting; other slots get a drawn sandbag nest. */
-function structTop(s) { return s.kind === 'hq' ? 190 : s.painted === 'tower' ? 165 : s.painted === 'nest' ? 95 : 110; }
+/* Turret: a sandbag pillbox with its gun and pennant baked into the art (assets/structs/pillbox_green.png for Green, pillbox_tan.png for Tan).
+   The painted cannon faces the enemy base, so the sprite is mirrored when its target lies the other way. */
+var PILL_W = 180;
+function structTop(s) { return s.kind === 'hq' ? 190 : 150; }
 function drawPillbox(s, C, dead, rec) {
-  var top = s.painted === 'tower' ? -118 : s.painted === 'nest' ? -46 : -58, team = s.team;
-  if (!s.painted) {
+  var img = s.team === 0 ? ASSETS.pillGreen : ASSETS.pillTan, team = s.team;
+  if (img) {
+    var native = team === 0 ? 1 : -1, tg0 = s.target && !s.target.dead ? s.target : null, face = tg0 ? (tg0.x >= s.x ? 1 : -1) : native;
+    var hp0 = s.hp / s.maxHp;
+    ctx.save(); ctx.translate(-face * rec, 0); ctx.scale(face * native, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ell(ctx, 4, 6, 80, 30); ctx.fill();
+    ctx.globalAlpha = dead ? 0.5 : 1; ctx.drawImage(img, -PILL_W / 2, -PILL_W * 0.86, PILL_W, PILL_W);
+    if (!dead && hp0 < 0.5) { ctx.globalAlpha = 0.9 * (1 - hp0 * 2); ctx.fillStyle = 'rgba(40,30,20,0.6)'; ell(ctx, 0, -PILL_W * 0.4, 60, 45); ctx.fill(); }
+    ctx.globalAlpha = 1; ctx.restore();
+    if (!dead && s.flashT > 0) { ctx.globalAlpha = s.flashT / 0.08 * 0.5; ctx.fillStyle = '#fff'; ell(ctx, 0, -PILL_W * 0.4, 70, 60); ctx.fill(); ctx.globalAlpha = 1; }
+    if (dead) { ctx.fillStyle = 'rgba(30,22,14,0.55)'; ell(ctx, 0, -20, 72, 44); ctx.fill(); ctx.strokeStyle = '#2A2118'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-40, -50); ctx.lineTo(30, 10); ctx.moveTo(-20, 14); ctx.lineTo(36, -38); ctx.stroke(); }
+    return;
+  }
+  // fallback if the art fails to load: a plain drawn pillbox with a separate gun
+  var top = -58;
+  {
     ctx.fillStyle = 'rgba(0,0,0,0.22)'; ell(ctx, 6, 8, 78, 34); ctx.fill();
     ctx.fillStyle = dead ? '#B9A070' : '#D7BE82'; ell(ctx, 0, 0, 66, 30); ctx.fill();
     for (var i = 0; i < 14; i++) { var a = i / 14 * Math.PI * 2, bx = Math.cos(a) * 62, by = Math.sin(a) * 27 - 6; ctx.fillStyle = dead ? '#A8906A' : (i % 2 ? '#E2CB92' : '#D2B77C'); ell(ctx, bx, by, 15, 9); ctx.fill(); ctx.strokeStyle = '#4A3A22'; ctx.lineWidth = 2; ctx.stroke(); }
@@ -3405,6 +3430,8 @@ function loadAssets(done) {
   var pending = 0, finish = function () { if (--pending === 0) done(); };
   function img(url, cb) { pending++; var im = new Image(); im.onload = function () { cb(im); finish(); }; im.onerror = function () { cb(null); finish(); }; im.src = ASSET_BASE + url; }
   img('assets/map.webp', function (im) { ASSETS.map = im; });
+  img("assets/structs/pillbox_green.png", function (im) { ASSETS.pillGreen = im; });
+  img("assets/structs/pillbox_tan.png", function (im) { ASSETS.pillTan = im; });
   loadHeroArt(img);
   if (!pending) done();
 }

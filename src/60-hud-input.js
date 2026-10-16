@@ -462,6 +462,8 @@ function loadAssets(done) {
   var pending = 0, finish = function () { if (--pending === 0) done(); };
   function img(url, cb) { pending++; var im = new Image(); im.onload = function () { cb(im); finish(); }; im.onerror = function () { cb(null); finish(); }; im.src = ASSET_BASE + url; }
   img('assets/map.webp', function (im) { ASSETS.map = im; });
+  img("assets/structs/pillbox_green.png", function (im) { ASSETS.pillGreen = im; });
+  img("assets/structs/pillbox_tan.png", function (im) { ASSETS.pillTan = im; });
   loadHeroArt(img);
   if (!pending) done();
 }

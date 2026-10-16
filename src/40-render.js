@@ -32,7 +32,7 @@ function makeGrain() {
   grainPat = ctx.createPattern(grainCv, 'repeat');
 }
 /* The battlefield is the painted sandbox (assets/map.webp, one world unit per pixel). ASSETS is filled by loadAssets() before the game starts. */
-var ASSETS = { map: null, miniCv: null, tiles: null };
+var ASSETS = { map: null, miniCv: null, tiles: null, pillGreen: null, pillTan: null };
 /* The map is cut into 512 px tiles at three scales (1, 1/2, 1/4) so a frame draws only the tiles in view, at a size near the zoom level;
    that keeps per-frame pixel work small on any renderer instead of scaling the whole 4K image every frame. */
 var TILE = 512;
@@ -362,11 +362,27 @@ function drawStruct(s) {
   }
   ctx.restore();
 }
-/* Turret: a pillbox. Painted towers and nests get only a gun, pennant and damage drawn over the painting; other slots get a drawn sandbag nest. */
-function structTop(s) { return s.kind === 'hq' ? 190 : s.painted === 'tower' ? 165 : s.painted === 'nest' ? 95 : 110; }
+/* Turret: a sandbag pillbox with its gun and pennant baked into the art (assets/structs/pillbox_green.png for Green, pillbox_tan.png for Tan).
+   The painted cannon faces the enemy base, so the sprite is mirrored when its target lies the other way. */
+var PILL_W = 180;
+function structTop(s) { return s.kind === 'hq' ? 190 : 150; }
 function drawPillbox(s, C, dead, rec) {
-  var top = s.painted === 'tower' ? -118 : s.painted === 'nest' ? -46 : -58, team = s.team;
-  if (!s.painted) {
+  var img = s.team === 0 ? ASSETS.pillGreen : ASSETS.pillTan, team = s.team;
+  if (img) {
+    var native = team === 0 ? 1 : -1, tg0 = s.target && !s.target.dead ? s.target : null, face = tg0 ? (tg0.x >= s.x ? 1 : -1) : native;
+    var hp0 = s.hp / s.maxHp;
+    ctx.save(); ctx.translate(-face * rec, 0); ctx.scale(face * native, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ell(ctx, 4, 6, 80, 30); ctx.fill();
+    ctx.globalAlpha = dead ? 0.5 : 1; ctx.drawImage(img, -PILL_W / 2, -PILL_W * 0.86, PILL_W, PILL_W);
+    if (!dead && hp0 < 0.5) { ctx.globalAlpha = 0.9 * (1 - hp0 * 2); ctx.fillStyle = 'rgba(40,30,20,0.6)'; ell(ctx, 0, -PILL_W * 0.4, 60, 45); ctx.fill(); }
+    ctx.globalAlpha = 1; ctx.restore();
+    if (!dead && s.flashT > 0) { ctx.globalAlpha = s.flashT / 0.08 * 0.5; ctx.fillStyle = '#fff'; ell(ctx, 0, -PILL_W * 0.4, 70, 60); ctx.fill(); ctx.globalAlpha = 1; }
+    if (dead) { ctx.fillStyle = 'rgba(30,22,14,0.55)'; ell(ctx, 0, -20, 72, 44); ctx.fill(); ctx.strokeStyle = '#2A2118'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-40, -50); ctx.lineTo(30, 10); ctx.moveTo(-20, 14); ctx.lineTo(36, -38); ctx.stroke(); }
+    return;
+  }
+  // fallback if the art fails to load: a plain drawn pillbox with a separate gun
+  var top = -58;
+  {
     ctx.fillStyle = 'rgba(0,0,0,0.22)'; ell(ctx, 6, 8, 78, 34); ctx.fill();
     ctx.fillStyle = dead ? '#B9A070' : '#D7BE82'; ell(ctx, 0, 0, 66, 30); ctx.fill();
     for (var i = 0; i < 14; i++) { var a = i / 14 * Math.PI * 2, bx = Math.cos(a) * 62, by = Math.sin(a) * 27 - 6; ctx.fillStyle = dead ? '#A8906A' : (i % 2 ? '#E2CB92' : '#D2B77C'); ell(ctx, bx, by, 15, 9); ctx.fill(); ctx.strokeStyle = '#4A3A22'; ctx.lineWidth = 2; ctx.stroke(); }
