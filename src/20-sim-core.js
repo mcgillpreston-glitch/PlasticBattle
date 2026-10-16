@@ -75,6 +75,8 @@ function spawnWave() {
     for (var lane = 0; lane < LANES.length; lane++) {
       for (var i = 0; i < 2; i++) addMinion(team, 'melee', lane);
       for (var k = 0; k < 2; k++) addMinion(team, 'rifle', lane);
+      var extra = G.wave >= RAMP.from ? Math.min(RAMP.max, Math.floor((G.wave - RAMP.from) / RAMP.every) + 1) : 0;
+      for (var x = 0; x < extra; x++) addMinion(team, 'rifle', lane);
       if (G.wave % 3 === 0) addMinion(team, (G.wave / 3) % 3 === lane ? 'tank' : 'mortar', lane);
       if (laneOpen(1 - team, lane)) addMinion(team, 'jeep', lane);
     }

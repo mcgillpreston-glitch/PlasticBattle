@@ -90,6 +90,8 @@ var HEROES = [
 ];
 /* Tuning pass: ability cooldowns are 30% shorter and the gap between basic shots 20% shorter (the hero table above keeps the design numbers). */
 /* Match length in seconds. At the buzzer the fort with more structure HP left wins; level HP is a draw. */
+/* Mid-game wave ramp: from wave `from`, every `every` waves each lane gets one more rifle per side, up to `max` extra. */
+var RAMP = { from: 8, every: 4, max: 3 };
 var MATCH_LEN = 10 * 60;
 var TUNE = { cdMul: 0.7, acdMul: 0.8 };
 HEROES.forEach(function (h) {
