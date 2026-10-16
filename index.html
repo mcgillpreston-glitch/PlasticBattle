@@ -3227,7 +3227,7 @@ function renderSB() {
     var hs = heroes.filter(function (h) { return h.team === team; });
     var sum = function (k) { return hs.reduce(function (a, h) { return a + h.st[k]; }, 0); };
     var mine = G.structs.filter(function (s) { return s.team === team; }), theirs = G.structs.filter(function (s) { return s.team !== team; });
-    return { team: team, hs: hs, k: G.kills[team], d: sum('d'), a: sum('a'), cs: sum('cs'), dmgH: sum('dmgH'), dmgS: sum('dmgS'), heal: sum('heal'),
+    return { team: team, hs: hs, k: G.kills[team], d: sum('d'), a: sum('a'), cs: sum('cs'), cash: sum('cash'), dmgH: sum('dmgH'), dmgS: sum('dmgS'), heal: sum('heal'),
       held: mine.filter(function (s) { return !s.dead; }).length, taken: theirs.filter(function (s) { return s.dead; }).length,
       lvl: hs.length ? hs.reduce(function (a, h) { return a + h.lvl; }, 0) / hs.length : 0, orders: hs.reduce(function (a, h) { return a + h.augs.length; }, 0) };
   });
@@ -3240,7 +3240,7 @@ function renderSB() {
     html += '<section class="sbteam ' + cls + '"><header><h3>' + name + '</h3><div class="sbstats">' +
       '<span>Kills <b>' + T.k + '</b></span><span>Deaths <b>' + T.d + '</b></span><span>Assists <b>' + T.a + '</b></span>' +
       '<span>Positions held <b>' + T.held + '/7</b></span><span>Positions taken <b>' + T.taken + '</b></span>' +
-      '<span>Hero dmg <b>' + kfmt(T.dmgH) + '</b></span><span>Structure dmg <b>' + kfmt(T.dmgS) + '</b></span><span>CS <b>' + T.cs + '</b></span><span>Avg level <b>' + T.lvl.toFixed(1) + '</b></span><span>Orders <b>' + T.orders + '</b></span>' +
+      '<span>Hero dmg <b>' + kfmt(T.dmgH) + '</b></span><span>Structure dmg <b>' + kfmt(T.dmgS) + '</b></span><span>CS <b>' + T.cs + '</b></span><span>Team cash <b>' + kfmt(T.cash) + '</b></span><span>Avg level <b>' + T.lvl.toFixed(1) + '</b></span><span>Orders <b>' + T.orders + '</b></span>' +
       '</div></header><div class="sbwrap"><table class="sbt"><thead><tr><th scope="col">Soldier</th><th scope="col">Lvl</th><th scope="col">K / D / A</th><th scope="col">CS</th><th scope="col" title="Cash held plus anything stashed at the HQ">Cash</th><th scope="col">Hero dmg</th><th scope="col">Struct dmg</th><th scope="col">Dmg taken</th><th scope="col">Heal/Shield</th><th scope="col">Best streak</th><th scope="col">Orders</th><th scope="col">Status</th></tr></thead><tbody>';
     T.hs.forEach(function (h) {
       var b = function (c, v) { return '<td' + (best[c] > 0 && h.st[c] === best[c] ? ' class="best"' : '') + '>' + v + '</td>'; };
