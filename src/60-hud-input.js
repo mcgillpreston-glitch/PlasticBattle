@@ -199,7 +199,7 @@ function cmdMove(pt, amove) {
   var u = G.player; u.target = null; u.move = pt; u.amove = amove ? pt : null;
 }
 function cmdTarget(t) {
-  if (NET.mode === 'online') { netSend({ t: 'atk', id: t.id }); G.player.target = t; predOff(); return; }
+  if (NET.mode === 'online') { netSend({ t: 'atk', id: t.id }); G.player.target = t; predAttack(t); return; }
   var u = G.player; u.target = t; u.move = null; u.amove = null;
 }
 function cmdCast(slot, w) {
@@ -480,4 +480,4 @@ function start() {
 }
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(start, start); else start();
 
-window.__PF = { get G() { return G; }, get NET() { return NET; }, predDebug: predDebug, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };
+window.__PF = { get G() { return G; }, get NET() { return NET; }, predDebug: predDebug, cmdTarget: cmdTarget, cmdMove: cmdMove, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };

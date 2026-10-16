@@ -231,7 +231,7 @@ class Room {
         const t = G.units.find(x => x.id === id) || G.structs.find(x => x.id === id);
         if (!t || t.team === u.team || t.dead) return;
         if (t.isStruct ? !C.targetable(t) : !C.visibleTo(t, u.team)) return;
-        u.target = t; u.move = null; u.amove = null; break;
+        u.target = t; u.move = null; u.amove = null; u.ack = [G.time, u.x, u.y]; break;
       }
       case 'cast': {
         if (!SLOTS.includes(m.s)) return;
