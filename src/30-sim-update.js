@@ -4,6 +4,7 @@
 function update(dt) {
   if (!G || G.over) return;
   G.time += dt;
+  if (G.time >= MATCH_LEN) { timeUp(); return; }
   G.nextWave -= dt;
   if (G.nextWave <= 0) { spawnWave(); G.nextWave = 25; }
 
@@ -399,6 +400,14 @@ function startBarrage() {
   for (var li = 0; li < LANES.length; li++) { G.barrage.beams.push({ t: 0.5, dir: -1, acc: li * 0.05, lane: li }); G.barrage.beams.push({ t: 0.5, dir: 1, acc: 0.15 + li * 0.05, lane: li }); }
   emit('sprinkler');
   feed('The sprinkler came on: water sweeping out from the centre', '');
+}
+/* Buzzer: compare the structure HP each side has left. Within 2% counts as a draw. */
+function timeUp() {
+  var hp = [0, 0], mx = [0, 0];
+  G.structs.forEach(function (s) { if (!s.dead) hp[s.team] += s.hp; mx[s.team] += s.maxHp; });
+  var f0 = mx[0] ? hp[0] / mx[0] : 0, f1 = mx[1] ? hp[1] / mx[1] : 0;
+  var winner = Math.abs(f0 - f1) < 0.02 ? -1 : (f0 > f1 ? 0 : 1);
+  G.over = true; G.winner = winner; emit('end', winner, 'time');
 }
 function updateBarrage(dt) {
   if (!G.barrage && G.time > 18 * 60) startBarrage();

@@ -156,7 +156,7 @@ function renderSB() {
   });
   var tot = teams[0].dmgH + teams[1].dmgH || 1;
   document.getElementById('sbTug').innerHTML = '<i style="width:' + (100 * teams[0].dmgH / tot).toFixed(1) + '%;background:var(--green)"></i><i style="flex:1;background:var(--tan)"></i>';
-  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b></span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Sprinkler on</b></span>' : '<span>Sprinkler at <b>18:00</b></span>');
+  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b> / ' + fmtTime(MATCH_LEN) + '</span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Sprinkler on</b></span>' : '<span>Sprinkler at <b>18:00</b></span>');
   var html = '';
   teams.forEach(function (T) {
     var cls = T.team === 0 ? 'g' : 't', name = T.team === 0 ? 'Green Army' : 'Tan Army';

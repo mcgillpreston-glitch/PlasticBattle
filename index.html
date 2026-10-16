@@ -630,6 +630,8 @@ var HEROES = [
   R:{n:'Night Raid',t:'buff',cd:45,dur:4,b:{ms:.4,dmgMul:.4,ghost:1}}}
 ];
 /* Tuning pass: ability cooldowns are 30% shorter and the gap between basic shots 20% shorter (the hero table above keeps the design numbers). */
+/* Match length in seconds. At the buzzer the fort with more structure HP left wins; level HP is a draw. */
+var MATCH_LEN = 10 * 60;
 var TUNE = { cdMul: 0.7, acdMul: 0.8 };
 HEROES.forEach(function (h) {
   h.acd = Math.round(h.acd * TUNE.acdMul * 100) / 100;
@@ -1707,6 +1709,7 @@ function alliesNear(u, r) { return G.units.filter(function (a) { return a.team =
 function update(dt) {
   if (!G || G.over) return;
   G.time += dt;
+  if (G.time >= MATCH_LEN) { timeUp(); return; }
   G.nextWave -= dt;
   if (G.nextWave <= 0) { spawnWave(); G.nextWave = 25; }
 
@@ -2102,6 +2105,14 @@ function startBarrage() {
   for (var li = 0; li < LANES.length; li++) { G.barrage.beams.push({ t: 0.5, dir: -1, acc: li * 0.05, lane: li }); G.barrage.beams.push({ t: 0.5, dir: 1, acc: 0.15 + li * 0.05, lane: li }); }
   emit('sprinkler');
   feed('The sprinkler came on: water sweeping out from the centre', '');
+}
+/* Buzzer: compare the structure HP each side has left. Within 2% counts as a draw. */
+function timeUp() {
+  var hp = [0, 0], mx = [0, 0];
+  G.structs.forEach(function (s) { if (!s.dead) hp[s.team] += s.hp; mx[s.team] += s.maxHp; });
+  var f0 = mx[0] ? hp[0] / mx[0] : 0, f1 = mx[1] ? hp[1] / mx[1] : 0;
+  var winner = Math.abs(f0 - f1) < 0.02 ? -1 : (f0 > f1 ? 0 : 1);
+  G.over = true; G.winner = winner; emit('end', winner, 'time');
 }
 function updateBarrage(dt) {
   if (!G.barrage && G.time > 18 * 60) startBarrage();
@@ -2877,7 +2888,7 @@ function present(e) {
       if (NET.mode === 'online') { u.spec = ns; u.pose = ns.key; u.name = ns.name; u.cd = { Q: 0, W: 0, E: 0, R: 0, D: 0, F: 0 }; u.cdMax = { Q: 1, W: 1, E: 1, R: 1, D: 1, F: 1 }; u.buffs = []; u._mh = ns.hp; u._rng = ns.range; u._acd = ns.acd; }
       if (isMe(e[1])) { buildAbilityBar(); showAlert('REASSIGNED \u00b7 RETURNING AS ' + ns.name.toUpperCase(), 'good'); playSfx('ui'); if (!swapModal.hidden) swapModal.hidden = true; }
       break;
-    case 'end': showEnd(e[1]); break;
+    case 'end': showEnd(e[1], e[2]); break;
   }
 }
 function presentLocal() { if (!G || !G.ev || !G.ev.length) return; var evs = G.ev; G.ev = []; evs.forEach(present); }
@@ -2991,13 +3002,15 @@ function updateAlerts(dt) {
   var a = ALERT.q.shift(); ALERT.el.textContent = a.txt; ALERT.el.className = 'hud on ' + a.cls; ALERT.el.hidden = false; ALERT.t = 2.4;
   if (a.cls === 'bad') playSfx('alert');
 }
-function showEnd(winner) {
+function showEnd(winner, reason) {
   if (!G) return;
   G.over = true; G.winner = winner;
-  var p = G.player, won = winner === MYTEAM, st = (p && p.st) || { k: 0, d: 0 };
-  document.getElementById('endTitle').textContent = won ? 'Mission accomplished' : 'Mission failed';
-  document.getElementById('endEyebrow').textContent = winner === 0 ? 'Tan bucket bunker destroyed · Green wins' : 'Green sand fort destroyed · Tan wins';
-  showAlert(won ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED', won ? 'good' : 'bad');
+  var p = G.player, won = winner === MYTEAM, st = (p && p.st) || { k: 0, d: 0 }, draw = winner === -1, timed = reason === 'time';
+  var title = draw ? 'Time\u2019s up' : won ? 'Mission accomplished' : 'Mission failed';
+  var eyebrow = draw ? 'Ten minutes · both forts still standing level · Draw' : timed ? (winner === 0 ? 'Ten minutes · Green holds more fort strength · Green wins' : 'Ten minutes · Tan holds more fort strength · Tan wins') : (winner === 0 ? 'Tan bucket bunker destroyed · Green wins' : 'Green sand fort destroyed · Tan wins');
+  document.getElementById('endTitle').textContent = title;
+  document.getElementById('endEyebrow').textContent = eyebrow;
+  showAlert(draw ? 'TIME\u2019S UP' : won ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED', draw ? 'info' : won ? 'good' : 'bad');
   document.getElementById('endStats').textContent = 'Match time ' + fmtTime(G.time) + ' · You fought as ' + (p ? p.name : '-') + ' · ' + st.k + ' kills, ' + st.d + ' casualties · Level ' + (p ? p.lvl : '-');
   document.getElementById('again').textContent = NET.mode === 'online' ? 'Back to lobby' : 'Roll call';
   document.getElementById('endModal').hidden = false;
@@ -3163,7 +3176,7 @@ function renderSB() {
   });
   var tot = teams[0].dmgH + teams[1].dmgH || 1;
   document.getElementById('sbTug').innerHTML = '<i style="width:' + (100 * teams[0].dmgH / tot).toFixed(1) + '%;background:var(--green)"></i><i style="flex:1;background:var(--tan)"></i>';
-  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b></span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Sprinkler on</b></span>' : '<span>Sprinkler at <b>18:00</b></span>');
+  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b> / ' + fmtTime(MATCH_LEN) + '</span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Sprinkler on</b></span>' : '<span>Sprinkler at <b>18:00</b></span>');
   var html = '';
   teams.forEach(function (T) {
     var cls = T.team === 0 ? 'g' : 't', name = T.team === 0 ? 'Green Army' : 'Tan Army';
