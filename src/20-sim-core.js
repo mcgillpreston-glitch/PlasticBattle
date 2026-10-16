@@ -169,7 +169,7 @@ function kill(src, tgt) {
   if (tgt.dead) return;
   tgt.dead = true; tgt.hp = 0; tgt.deathT = 0;
   if (tgt.isStruct) {
-    var label = (tgt.team === 0 ? 'Green ' : 'Tan ') + (tgt.kind === 'hq' ? 'fort' : (['top', 'mid', 'bottom'][tgt.lane] || '') + ' ' + (tgt.order === 1 ? 'outer' : tgt.order === 2 ? 'middle' : 'inner') + ' turret');
+    var label = (tgt.team === 0 ? 'Green ' : 'Tan ') + (tgt.kind === 'hq' ? 'fort' : (['top', 'mid', 'bottom'][tgt.lane] || '') + ' ' + (tgt.order === 1 ? 'outer' : 'inner') + ' turret');
     feed(label + ' destroyed', tgt.team === 0 ? 'ft' : 'fg');
     emit('struct', tgt.id, tgt.team, tgt.kind, src && src.kind === 'hero' ? src.id : 0, tgt.lane, tgt.order);
     chips(tgt.x, tgt.y - 30, tgt.team, 30, 1.6);

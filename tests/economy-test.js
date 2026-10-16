@@ -34,7 +34,7 @@ check('a turret pays more for inner turrets than outer', () => {
   const S = fresh();
   const hero = heroOf(S, 0, 0);
   const outer = S.G.structs.find(s => s.team === 1 && s.kind === 'outpost' && s.order === 1);
-  const inner = S.G.structs.find(s => s.team === 1 && s.kind === 'outpost' && s.order === 3);
+  const inner = S.G.structs.find(s => s.team === 1 && s.kind === 'outpost' && s.order === 2);
   hero.cash = 0; S.kill(hero, outer); const outerPay = hero.cash;
   hero.cash = 0; S.kill(hero, inner); const innerPay = hero.cash;
   assert.ok(innerPay > outerPay, 'inner ' + innerPay + ' outer ' + outerPay);

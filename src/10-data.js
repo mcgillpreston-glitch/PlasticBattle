@@ -210,6 +210,17 @@ var LANES = LANE_DEF.map(function (d, li) {
 });
 var FIELD_CAPS = [];
 LANES.forEach(function (L) { for (var i = 0; i < L.pts.length - 1; i++) { var a = L.pts[i], b = L.pts[i + 1]; FIELD_CAPS.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, r: Math.min(a.r, b.r), lane: L.i }); } });
+/* Painted sand rings are open ground: each one is walkable as a disc so its turret can stand on it. */
+var RING_R = 150;
+/* Turret rings (see below for the turrets themselves). Turrets: two per lane per team (outer, inner), each a sandbag pillbox sitting on one of the twelve painted sand rings.
+   Ring centres are in the art's pixel space (1672 x 941) and converted to world units. Each lane has four rings: the two nearer
+   the green fort belong to green (inner = nearer green's fort, outer = nearer the middle), the two nearer the tan castle to tan. */
+var TURRET_RINGS = {
+  top: [{ team: 0, order: 2, px: [210, 425] }, { team: 0, order: 1, px: [445, 225] }, { team: 1, order: 1, px: [785, 120] }, { team: 1, order: 2, px: [1112, 95] }],
+  mid: [{ team: 0, order: 2, px: [465, 600] }, { team: 0, order: 1, px: [660, 520] }, { team: 1, order: 1, px: [1080, 405] }, { team: 1, order: 2, px: [1245, 325] }],
+  bot: [{ team: 0, order: 2, px: [740, 785] }, { team: 0, order: 1, px: [1060, 785] }, { team: 1, order: 1, px: [1420, 640] }, { team: 1, order: 2, px: [1500, 445] }]
+};
+Object.keys(TURRET_RINGS).forEach(function (k) { TURRET_RINGS[k].forEach(function (r) { var x = Math.round(r.px[0] * MAP.W / 1672), y = Math.round(r.px[1] * MAP.H / 941); FIELD_EXTRA.push({ ax: x, ay: y, bx: x, by: y, r: RING_R }); }); });
 FIELD_EXTRA.forEach(function (c) { FIELD_CAPS.push({ ax: c.ax, ay: c.ay, bx: c.bx, by: c.by, r: c.r, lane: -1 }); });
 FIELD_CAPS.forEach(function (c) { c.minx = Math.min(c.ax, c.bx) - c.r; c.maxx = Math.max(c.ax, c.bx) + c.r; c.miny = Math.min(c.ay, c.by) - c.r; c.maxy = Math.max(c.ay, c.by) + c.r; });
 /* bucket grid so a field query only looks at the few capsules nearby (a point more than FB_REACH outside every capsule reads as far outside) */
@@ -289,31 +300,12 @@ function laneOf(u) { return u.lane != null ? u.lane : nearestLane(u); }
 function fountain(team) { return FOUNT[team]; }
 function progress(u) { var t = laneProj(u, laneOf(u)).t; return u.team === 0 ? t : 1 - t; }
 
-/* Turrets: three per lane per team (outer, middle, inner), each a sandbag pillbox. Every turret sits at the same lane position for both teams,
-   mirrored along the lane (green 0.42 / 0.30 / 0.17, tan 0.58 / 0.70 / 0.83) and on the same side of the lane, so the two forts line up. */
 var STRUCT_DEF = [];
 LANES.forEach(function (L) {
-  // one offset per lane slot, shared by both teams, so the two forts match; moved in toward the spine until both spots are at least 24 units inside the walkable field
-  [[1, 0.42, 0.58], [2, 0.3, 0.7], [3, 0.17, 0.83]].forEach(function (k) {
-    var side0 = L.name === 'top' ? 1 : L.name === 'bot' ? -1 : (k[0] % 2 ? 1 : -1), side = side0;
-    var pos = function (t, off) {
-      var q = lanePt(t, 0, L.i), q2 = lanePt(t + 0.002, 0, L.i), dx = q2.x - q.x, dy = q2.y - q.y, len = vlen(dx, dy) || 1;
-      return { x: Math.round(q.x - dy / len * side * off), y: Math.round(q.y + dx / len * side * off) };
-    };
-    var r = 0; L.pts.forEach(function (p, i) { if (L.cum[i] <= k[1] * L.len) r = p.r; });
-    var off = r + 64, a, b, ok = false;
-    // prefer the usual side and the largest offset; the opposite side is tried only if the usual one has no walkable spot
-    [side0, -side0].some(function (sd) {
-      side = sd;
-      for (off = r + 64; off >= 0; off -= 2) {
-        a = pos(k[1], off); b = pos(k[2], off);
-        if (fieldSD(a.x, a.y) >= 24 && fieldSD(b.x, b.y) >= 24) return (ok = true);
-      }
-      return false;
-    });
-    [[0, k[1], a], [1, k[2], b]].forEach(function (e) {
-      STRUCT_DEF.push({ team: e[0], lane: L.i, kind: 'outpost', order: k[0], x: e[2].x, y: e[2].y, t: e[1], painted: null });
-    });
+  (TURRET_RINGS[L.name] || []).forEach(function (r) {
+    var x = Math.round(r.px[0] * MAP.W / 1672), y = Math.round(r.px[1] * MAP.H / 941);
+    var t = laneProj({ x: x, y: y }, L.i).t;
+    STRUCT_DEF.push({ team: r.team, lane: L.i, kind: 'outpost', order: r.order, x: x, y: y, t: t, painted: null });
   });
 });
 STRUCT_DEF.push({ team: 0, lane: -1, kind: 'hq', order: 4, x: 500, y: 1440, t: 0 });
