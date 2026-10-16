@@ -92,6 +92,8 @@ var HEROES = [
 /* Match length in seconds. At the buzzer the fort with more structure HP left wins; level HP is a draw. */
 /* Mid-game wave ramp: from wave `from`, every `every` waves each lane gets one more rifle per side, up to `max` extra. */
 var RAMP = { from: 8, every: 4, max: 3 };
+/* Minions keep advancing along their lane while they fire, instead of stopping at first contact. */
+var WALK_SHOOT = true;
 var MATCH_LEN = 10 * 60;
 var TUNE = { cdMul: 0.7, acdMul: 0.8 };
 HEROES.forEach(function (h) {

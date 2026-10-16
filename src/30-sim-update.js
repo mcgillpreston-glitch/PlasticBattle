@@ -151,6 +151,7 @@ function updateUnit(u, dt) {
     var dd = dist(u, tgt);
     if (dd <= rng) {
       u.path = null;
+      if (u.kind === 'minion' && WALK_SHOOT && u.move && spd > 0) { wantMove = true; stepToward(u, u.move.x, u.move.y, spd * dt, 4); }
       if (Math.abs(tgt.x - u.x) > 4) u.facing = tgt.x < u.x ? -1 : 1;
       if (u.aaT <= 0 && !u.cone && !u.chan) {
         if (!u.wind || u.wind.tgt !== tgt) u.wind = { tgt: tgt, t: 0, dur: windTime(u) };
@@ -268,7 +269,7 @@ function minionAI(m, dt) {
   });
   if (!best) G.structs.forEach(function (s) { if (s.team !== m.team && targetable(s) && dist(s, m) < 460 + s.r) best = s; });
   m.target = best;
-  if (!best) {
+  if (!best || WALK_SHOOT) {
     var q = laneProj(m, m.lane), nt = q.t + (m.team === 0 ? 0.08 : -0.08);
     m.move = freePoint(lanePt(nt, clamp(q.off, -60, 60), m.lane), m.r);
   }
