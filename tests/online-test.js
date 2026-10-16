@@ -58,9 +58,10 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
   check('3v3 roster: 6 heroes known to each client', a.units >= 6 && b.units >= 6, { a: a.units, b: b.units });
 
   // ---- client-side prediction: own hero moves on the click, before the server answers ----
-  await A.evaluate(() => { const p = window.__PF.G.player; window.__c0 = { x: p.x, y: p.y }; window.__PF.cmdMove({ x: p.x + 200, y: p.y - 60 }, false); });
+  await A.evaluate(() => { const PF = window.__PF, p = PF.G.player; window.__c0 = { x: p.x, y: p.y }; const d = PF.clearDir(p, 200); PF.cmdMove(d, false); });
+  await sleep(60);
   const quick = await A.evaluate(() => { const p = window.__PF.G.player; return Math.hypot(p.x - window.__c0.x, p.y - window.__c0.y); });
-  check('PRED: own unit starts moving on the click, before the server answers', quick > 2, { movedInMs: Math.round(quick * 10) / 10 });
+  check('PRED: own unit starts moving on the click, before the server answers', quick > 5, { movedIn60ms: Math.round(quick * 10) / 10 });
   await sleep(2500);
   const pd = await A.evaluate(() => window.__PF.predDebug());
   const gap = pd.pred && pd.server ? Math.hypot(pd.pred.x - pd.server.x, pd.pred.y - pd.server.y) : -1;
@@ -85,6 +86,23 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
     const gapA = pa.pred && pa.server ? Math.hypot(pa.pred.x - pa.server.x, pa.pred.y - pa.server.y) : -1;
     check('ATTACK: prediction stays close to the server while chasing a moving target', gapA >= 0 && gapA < 90, { gap: Math.round(gapA) });
   } else check('ATTACK: an enemy hero is in sight for the test', false);
+
+  // ---- ability prediction: the cooldown and the press show at once; a dash moves at once ----
+  const pq = await A.evaluate(() => { const p = window.__PF.G.player; return { cdW: p.cd.W, eDash: p.spec.E && p.spec.E.t === 'dash', cdE: p.cd.E }; });
+  await A.evaluate(() => { const PF = window.__PF, p = PF.G.player; PF.cmdCast('W', PF.clearDir(p, 300)); });
+  await sleep(40);
+  const wNow = await A.evaluate(() => window.__PF.G.player.cd.W);
+  check('ABILITY: cooldown starts on the press, before the server answers', pq.cdW === 0 && wNow > 0, { cdW: Math.round(wNow * 10) / 10 });
+  await sleep(1500);
+  const wLater = await A.evaluate(() => window.__PF.G.player.cd.W);
+  check('ABILITY: the cooldown stays on once the server confirms the cast', wLater > 0, { cdW: Math.round(wLater * 10) / 10 });
+  if (pq.eDash && pq.cdE === 0) {
+    await A.evaluate(() => { const PF = window.__PF, p = PF.G.player; PF.cmdCast('E', PF.clearDir(p, 300)); });
+    const ex0 = await A.evaluate(() => window.__PF.G.player.x);
+    await sleep(60);
+    const ex1 = await A.evaluate(() => window.__PF.G.player.x);
+    check('ABILITY: a dash moves the unit at once', ex1 - ex0 > 10, { movedInMs: Math.round(ex1 - ex0) });
+  }
 
   // Move both players toward mid by clicking the ground ahead of them
   const startA = a.me;

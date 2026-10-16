@@ -124,14 +124,44 @@ function netSnap(S) {
 /* Client-side prediction for your own hero's ground moves. A click starts the unit moving at once, using the same pathing as the server.
    Each snapshot carries the server's position at the moment it applied your latest move (server time). We compare that with our own
    prediction at the same moment and fold the difference in gradually (corr decays), so corrections never show as a snap. */
-var PRED = { on: false, u: null, move: null, stop: 4, target: null, wind: null, cd: 0, hist: [], corr: { x: 0, y: 0 }, ackS: 0 };
+var PRED = { on: false, u: null, move: null, stop: 4, target: null, wind: null, dash: null, pend: {}, srvCd: {}, hist: [], corr: { x: 0, y: 0 }, ackS: 0 };
 function predStart() {
   var p = G.player; if (!p || p.dead) return false;
   if (!PRED.on || !PRED.u) { PRED.on = true; PRED.u = { x: p.x, y: p.y, r: p.r, path: null, pathGoal: null, pathVer: -1, pathCd: 0, repath: false, scAt: null, facing: p.facing }; PRED.corr = { x: 0, y: 0 }; PRED.hist = []; }
   return true;
 }
-function predOff() { PRED.on = false; PRED.u = null; PRED.move = null; PRED.target = null; PRED.wind = null; PRED.hist = []; PRED.corr = { x: 0, y: 0 }; }
-function predMove(pt) { if (predStart()) { PRED.target = null; PRED.wind = null; PRED.stop = 4; PRED.move = freePoint({ x: pt.x, y: pt.y }, G.player.r); } }
+function predOff() { PRED.on = false; PRED.u = null; PRED.move = null; PRED.target = null; PRED.wind = null; PRED.dash = null; PRED.hist = []; PRED.corr = { x: 0, y: 0 }; }
+/* ability press: the cooldown counts down here at once and the press flashes; the server's cooldown takes over once it confirms the cast,
+   and a press the server never confirms (refused or lost) drops the local cooldown after a short grace. A dash is predicted in full. */
+function predCast(slot, w) {
+  var p = G.player; if (!p || p.dead || p.dash) return;
+  if ((p.cd[slot] || 0) > 0 || PRED.pend[slot]) return;
+  var ab = abilityOf(p, slot); if (!ab) return;
+  PRED.pend[slot] = { t: performance.now() / 1000, cd: p.cdMax[slot] || 1 };
+  p.fireT = Math.max(p.fireT || 0, 0.14); p.recoilT = 0.12;
+  if (ab.t === 'dash' && predStart()) {
+    var dx = w.x - PRED.u.x, dy = w.y - PRED.u.y, L = vlen(dx, dy) || 1;
+    var dd = Math.min(ab.dist, Math.max(L, 80)), to = dashCut(PRED.u, clampLane({ x: PRED.u.x + dx / L * dd, y: PRED.u.y + dy / L * dd }));
+    PRED.dash = { fx: PRED.u.x, fy: PRED.u.y, tx: to.x, ty: to.y, t: 0, dur: 0.18 };
+    PRED.move = null; PRED.target = null; PRED.wind = null;
+  }
+}
+function predDashAdvance(raw) {
+  var d = PRED.dash, u = PRED.u; d.t += raw;
+  var k = Math.min(1, d.t / d.dur);
+  u.x = d.fx + (d.tx - d.fx) * k; u.y = d.fy + (d.ty - d.fy) * k;
+  if (k >= 1) PRED.dash = null;
+}
+function predCooldowns() {
+  var p = G.player, now = performance.now() / 1000;
+  Object.keys(PRED.pend).forEach(function (s) {
+    var pe = PRED.pend[s];
+    if (!p || p.dead || PRED.srvCd[s] > 0) { delete PRED.pend[s]; return; }   // the server has it now: its value is authoritative
+    if (now - pe.t > 0.6) { delete PRED.pend[s]; return; }                // not confirmed: refused or lost
+    p.cd[s] = Math.max(0.05, pe.cd - (now - pe.t));
+  });
+}
+function predMove(pt) { if (!PRED.dash && predStart()) { PRED.target = null; PRED.wind = null; PRED.stop = 4; PRED.move = freePoint({ x: pt.x, y: pt.y }, G.player.r); } }
 function predHalt() { PRED.move = null; PRED.target = null; PRED.wind = null; }
 /* attack order: chase the target's last known position and wind up locally once in range; the server confirms the shot */
 function predAttack(t) { if (predStart()) { PRED.target = t; PRED.move = null; PRED.wind = null; } }
@@ -186,6 +216,7 @@ function predStep(raw) {
     if (vlen(tg.x - u.x, tg.y - u.y) <= rng) { PRED.move = null; u.path = null; }
     else { PRED.move = { x: tg.x, y: tg.y }; PRED.stop = rng * 0.9; }
   }
+  if (PRED.dash) predDashAdvance(raw);
   if (PRED.move) {
     var spd = moveSpeed(p);
     if (spd > 0 && stepToward(u, PRED.move.x, PRED.move.y, spd * raw, PRED.stop)) PRED.move = null;
@@ -197,10 +228,16 @@ function predStep(raw) {
   var k = Math.exp(-raw * 12); PRED.corr.x *= k; PRED.corr.y *= k;
   p.x = u.x + PRED.corr.x; p.y = u.y + PRED.corr.y;
 }
+/* test hook: a point `dist` away from unit p, in the first direction clear of walls */
+function clearDir(p, dist) {
+  var angs = [0, 0.7, -0.7, 1.4, -1.4, 2.1, -2.1, 2.8, -2.8, 3.14];
+  for (var i = 0; i < angs.length; i++) { var tx = p.x + Math.cos(angs[i]) * dist, ty = p.y + Math.sin(angs[i]) * dist; if (segClear(p.x, p.y, tx, ty, p.r)) return { x: tx, y: ty }; }
+  return { x: p.x + dist, y: p.y };
+}
 /* test hook: the prediction state next to the server's latest position for our hero */
 function predDebug() {
   var cur = NETC.cur, me = G && G.player, sv = cur && me && cur.pu[me.id];
-  return { on: PRED.on, pred: PRED.u ? { x: PRED.u.x, y: PRED.u.y } : null, corr: { x: PRED.corr.x, y: PRED.corr.y }, server: sv ? { x: sv[3], y: sv[4] } : null, winding: !!(me && me.wind), target: PRED.target ? PRED.target.id : 0 };
+  return { on: PRED.on, pred: PRED.u ? { x: PRED.u.x, y: PRED.u.y } : null, corr: { x: PRED.corr.x, y: PRED.corr.y }, server: sv ? { x: sv[3], y: sv[4] } : null, winding: !!(me && me.wind), target: PRED.target ? PRED.target.id : 0, moving: !!PRED.move, dash: !!PRED.dash, spd: me ? moveSpeed(me) : -1, pend: Object.keys(PRED.pend) };
 }
 function netFrame(raw) {
   NETC.pingT -= raw; if (NETC.pingT <= 0 && NETC.ws) { NETC.pingT = 2; netSend({ t: 'ping', c: performance.now() }); }
@@ -222,6 +259,7 @@ function netFrame(raw) {
   G.proj.forEach(function (p) { var a = A.pp[p.id], b = B && B.pp[p.id]; if (a && b) { p.x = a[1] + (b[1] - a[1]) * al; p.y = a[2] + (b[2] - a[2]) * al; } else if (a) { p.x = a[1] + p.vx * since; p.y = a[2] + p.vy * since; } });
   G.lobs.forEach(function (l) { l.t = Math.min(l.delay, l.t0 + since); });
   predVisual(raw);
+  predCooldowns();
   NETC.aimT -= raw;
   if (G.player && G.player.chan && mouse.inside && NETC.aimT <= 0) { NETC.aimT = 0.1; netSend({ t: 'aim', x: Math.round(mouse.wx), y: Math.round(mouse.wy) }); }
 }
@@ -271,7 +309,7 @@ function applySnap(S) {
 }
 function applyMe(me) {
   var u = G.player; if (!u) return;
-  SLOTS.forEach(function (s, i) { u.cd[s] = me.cd[i] / 10; u.cdMax[s] = Math.max(0.1, me.cm[i] / 10); });
+  SLOTS.forEach(function (s, i) { u.cd[s] = me.cd[i] / 10; PRED.srvCd[s] = u.cd[s]; u.cdMax[s] = Math.max(0.1, me.cm[i] / 10); });
   u.xp = me.xp; u.ordersDone = me.od; u.tagMark = me.tag ? {} : null;
   if (me.tg) { var t = unitById(me.tg); if (t) u.target = t; } else u.target = null;
   u.augs = me.ag || [];
