@@ -7,7 +7,7 @@ var opts = { ranges: false, god: false, nocd: false, passive: false, pause: fals
 /* roster: [{ team, hero, human, name, pid }]; returns G. Used offline and by the server. */
 function simNewGame(roster) {
   uid = 1;
-  G = { time: 0, units: [], structs: [], proj: [], lobs: [], mines: [], fx: [], texts: [], kills: [0, 0], nextWave: 3, wave: 0,
+  G = { time: 0, units: [], structs: [], proj: [], lobs: [], mines: [], fx: [], texts: [], kills: [0, 0], nextWave: 3, wave: 0, stash: [],
     crates: [], over: false, winner: -1, barrage: null, player: null, feed: [], toastT: 0, hurtT: 0, blockers: [], moveMark: null, rounds: [], shake: 0, ev: [] };
   makeStructs();
   makeCrates();
@@ -47,7 +47,7 @@ function addHero(spec, team, isPlayer, slot) {
     target: null, move: null, amove: null, facing: team === 0 ? 1 : -1, slowT: 0, slowAmt: 0, kvx: 0, kvy: 0, aaT: 0, burnT: 0, burnDps: 0,
     dash: null, cone: null, chan: null, tagMark: null, iframe: 0, aggroT: 0, kills: 0, deaths: 0, think: 0, retreat: false, offer: null, deathT: 0,
     walk: 0, movedT: 0, recoilT: 0, flashT: 0, fireT: 0, stagT: 0, lungeT: 0,
-    st: { k: 0, d: 0, a: 0, cs: 0, dmgH: 0, dmgS: 0, taken: 0, heal: 0, mit: 0, pos: 0, streak: 0, best: 0 }, dmgBy: {}, dmgLog: [] };
+    cash: 0, st: { k: 0, d: 0, a: 0, cs: 0, dmgH: 0, dmgS: 0, taken: 0, heal: 0, mit: 0, pos: 0, streak: 0, best: 0, cash: 0 }, dmgBy: {}, dmgLog: [] };
   u.hp = maxHp(u);
   G.units.push(u);
   return u;
@@ -155,6 +155,12 @@ function damage(src, tgt, amt, o) {
   if (o.exec && !tgt.isStruct && tgt.hp > 0 && tgt.hp / (tgt.kind === 'hero' ? maxHp(tgt) : tgt.maxHp) < o.exec) tgt.hp = 0;
   if (tgt.hp <= 0) kill(src, tgt);
 }
+/* Stash at the HQ: a hero within reach of its own fort can deposit cash, and anyone on the team can take a stash out for STASH_CUT. */
+function atHq(u) { var hq = G.structs.find(function (s) { return s.kind === 'hq' && s.team === u.team && !s.dead; }); return hq && dist(u, hq) < 520 ? hq : null; }
+function depositCash(u, amt) { amt = Math.floor(amt); if (u.dead || !atHq(u) || amt <= 0 || amt > u.cash) return false; u.cash -= amt; G.stash.push({ owner: u.id, team: u.team, amt: amt }); return true; }
+function withdrawCash(u, idx) { var e = G.stash[idx]; if (!e || u.dead || e.team !== u.team || !atHq(u)) return false; G.stash.splice(idx, 1); u.cash += Math.floor(e.amt * STASH_CUT); return true; }
+/* At the buzzer, cash in hand and stashed cash count at face value into each hero's stats. */
+function tallyCash() { G.units.forEach(function (u) { if (u.kind !== 'hero') return; var st = 0; G.stash.forEach(function (e) { if (e.owner === u.id) st += e.amt; }); u.st.cash = u.cash + st; }); }
 function kill(src, tgt) {
   if (tgt.dead) return;
   tgt.dead = true; tgt.hp = 0; tgt.deathT = 0;
@@ -165,7 +171,7 @@ function kill(src, tgt) {
     chips(tgt.x, tgt.y - 30, tgt.team, 30, 1.6);
     fx({ k: 'boom', x: tgt.x, y: tgt.y, r: tgt.r * 2, t: 0, dur: 0.6 });
     sfx('boom', tgt.x, tgt.y);
-    if (src && src.kind === 'hero') src.st.pos++;
+    if (src && src.kind === 'hero') { src.st.pos++; src.cash += CASH.turret + CASH.perOrder * (tgt.order - 1); }
     shakeAt(tgt.x, tgt.y, 9);
     rebuildBlockers();
     if (tgt.kind === 'hq') { G.over = true; G.winner = 1 - tgt.team; emit('end', G.winner); }
@@ -175,7 +181,7 @@ function kill(src, tgt) {
   if (tgt.kind === 'minion') {
     if (tgt.type === 'tank' || tgt.type === 'jeep') { fx({ k: 'boom', x: tgt.x, y: tgt.y, r: 80, t: 0, dur: 0.5 }); sfx('boom', tgt.x, tgt.y); }
     G.units.forEach(function (h) { if (h.kind === 'hero' && h.team !== tgt.team && !h.dead && dist(h, tgt) < 1000) giveXp(h, 32); });
-    if (src && src.kind === 'hero' && src.team !== tgt.team) src.st.cs++;
+    if (src && src.kind === 'hero' && src.team !== tgt.team) { src.st.cs++; src.cash += CASH.cs; }
     return;
   }
   tgt.deaths++; tgt.st.d++; tgt.st.streak = 0;
@@ -185,11 +191,11 @@ function kill(src, tgt) {
   G.kills[1 - tgt.team]++;
   if (killer && killer.team !== tgt.team) {
     emit('kill', killer.id, tgt.id, nm(tgt), killer.st.streak + 1);
-    killer.kills++; killer.st.k++; killer.st.streak++; killer.st.best = Math.max(killer.st.best, killer.st.streak); giveXp(killer, 220);
+    killer.kills++; killer.st.k++; killer.cash += CASH.hero + CASH.perLvl * tgt.lvl; killer.st.streak++; killer.st.best = Math.max(killer.st.best, killer.st.streak); giveXp(killer, 220);
     Object.keys(tgt.dmgBy).forEach(function (id) {
       if (G.time - tgt.dmgBy[id] > 10) return;
       var h = G.units.find(function (x) { return String(x.id) === id; });
-      if (h && h !== killer && h.team === killer.team) h.st.a++;
+      if (h && h !== killer && h.team === killer.team) { h.st.a++; h.cash += CASH.assist; }
     });
     if (killer.st.streak === 3 || killer.st.streak === 5) feed(nm(killer) + (killer.st.streak === 3 ? ' is on a tear (3 straight)' : ' is unstoppable (5 straight)'), killer.team === 0 ? 'fg' : 'ft');
     G.units.forEach(function (h) { if (h !== killer && h.kind === 'hero' && h.team === killer.team && !h.dead && dist(h, tgt) < 1100) giveXp(h, 90); });

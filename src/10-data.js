@@ -94,6 +94,9 @@ var HEROES = [
 var RAMP = { perTurret: 1, max: 3 };
 /* Minions keep advancing along their lane while they fire, instead of stopping at first contact. */
 var WALK_SHOOT = true;
+/* Cash: what each action pays. Stash take-outs pay STASH_CUT of the stashed amount; the HQ keeps the rest. */
+var CASH = { cs: 10, hero: 150, perLvl: 25, assist: 40, turret: 120, perOrder: 60 };
+var STASH_CUT = 0.8;
 var MATCH_LEN = 10 * 60;
 var TUNE = { cdMul: 0.7, acdMul: 0.8 };
 HEROES.forEach(function (h) {
