@@ -231,7 +231,7 @@ document.addEventListener('keydown', unlockAudio, { once: true });
 cv.addEventListener('pointerdown', function (e) {
   if (!G) return;
   var r = cv.getBoundingClientRect();
-  if (e.pointerType === 'mouse') { order(e.clientX - r.left, e.clientY - r.top); return; }
+  if (e.pointerType === 'mouse') { var pw = s2w(e.clientX - r.left, e.clientY - r.top); if (ownHqAt(pw)) { openShop(); return; } order(e.clientX - r.left, e.clientY - r.top); return; }
   drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false };
 });
 cv.addEventListener('pointermove', function (e) {
@@ -255,6 +255,7 @@ window.addEventListener('keydown', function (e) {
   if (e.key === 'Tab') { e.preventDefault(); if (sbEl.hidden) openSB('hold'); return; }
   var k = e.key.toUpperCase();
   if (k === 'ESCAPE' && !sbEl.hidden) { closeSB(); return; }
+  if (!shopModal.hidden && k !== 'P' && k !== 'ESCAPE') return;
   if (['Q', 'W', 'E', 'R', 'D', 'F'].indexOf(k) >= 0) {
     if (!ordersModal.hidden) return;
     var w = mouse.inside ? s2w(mouse.x, mouse.y) : { x: G.player.x + G.player.facing * 200, y: G.player.y };
@@ -265,7 +266,9 @@ window.addEventListener('keydown', function (e) {
   else if (k === 'Y') { cam.lock = !cam.lock; showToast(cam.lock ? 'Camera locked' : 'Camera free', 1); }
   else if (k === 'O') { if (ordersModal.hidden) openOrders(); else ordersModal.hidden = true; }
   else if (k === 'C') { if (swapModal.hidden) openSwap(); else swapModal.hidden = true; }
+  else if (k === 'P') { toggleShop(); }
   else if (k === 'ESCAPE') {
+    if (!shopModal.hidden) { closeShop(); return; }
     if (aimSlot || aMovePending) { aimSlot = null; aMovePending = false; refreshAim(); }
     else if (!ordersModal.hidden || !swapModal.hidden) { ordersModal.hidden = true; swapModal.hidden = true; }
     else if (!menuEl.hidden) closeMenu(); else openMenu();

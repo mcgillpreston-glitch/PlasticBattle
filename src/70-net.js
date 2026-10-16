@@ -73,6 +73,7 @@ function netMsg(m) {
     case 'start': netStart(m); break;
     case 's': netSnap(m); break;
     case 'sb': netScore(m); break;
+    case 'shop': NET.shop = m; renderShop(); break;
     case 'names': m.n.forEach(function (a) { var u = NET.byId && NET.byId[a[0]]; if (u) { u.pname = a[1] || null; u.bot = !a[1]; } }); break;
     case 'pong': NETC.ping = Math.round(performance.now() - m.c); var pe = document.getElementById('pingEl'); pe.hidden = false; pe.textContent = NETC.ping + ' MS'; break;
   }

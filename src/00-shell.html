@@ -295,6 +295,10 @@ body.online .cheat { display: none !important; }
   .orders { grid-template-columns: 1fr; }
   h1 { font-size: 28px; }
 }
+.shopSlots { display: flex; gap: 8px; flex-wrap: wrap; }
+.slot { min-width: 120px; padding: 8px 10px; border: 1px dashed rgba(214,203,170,0.35); border-radius: 6px; font-size: 13px; color: #B9B19A; }
+.slot.full { border-style: solid; color: #F1E9D2; }
+.shopRow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid rgba(214,203,170,0.12); }
 </style>
 
 <div id="app">
@@ -462,6 +466,27 @@ body.online .cheat { display: none !important; }
       <div class="actions" style="justify-content:space-between">
         <span class="muted" id="oHeld">Orders held: none</span>
         <button type="button" class="btn" id="oClose">Back to the line</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="shopModal" class="overlay" hidden role="dialog" aria-label="Shop">
+    <div class="card plate" style="width:min(820px,100%)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="eyebrow" id="shopCash">Cash 0</div>
+          <h2>Supply shop</h2>
+        </div>
+        <span class="muted" id="shopHq"></span>
+      </div>
+      <div class="eyebrow">Slots</div>
+      <div class="shopSlots" id="shopSlots"></div>
+      <div id="shopCats"></div>
+      <div class="eyebrow">HQ stash</div>
+      <div id="shopStash"></div>
+      <div class="actions" style="justify-content:space-between">
+        <span class="muted">Stash <input id="shopAmt" type="number" min="1" value="100" style="width:90px"> <button type="button" class="btn" id="shopDep">Stash cash</button></span>
+        <button type="button" class="btn" id="shopClose">Close</button>
       </div>
     </div>
   </div>

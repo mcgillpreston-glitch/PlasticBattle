@@ -97,6 +97,15 @@ var WALK_SHOOT = true;
 /* Cash: what each action pays. Stash take-outs pay STASH_CUT of the stashed amount; the HQ keeps the rest. */
 var CASH = { cs: 10, hero: 150, perLvl: 25, assist: 40, turret: 120, perOrder: 60 };
 var STASH_CUT = 0.8;
+/* Shop: five unique slots per hero, no stacking. mods adds to the hero's aug fields (hpMul, dmg, as, range). */
+var SHOP_SLOTS = 5;
+var SHOP_CATS = ['MREs', 'Training', 'Optics'];
+var SHOP_ITEMS = [
+  { id: 'ration', cat: 'MREs', name: 'Field ration', price: 120, mods: { hpMul: 0.10 }, blurb: '+10% max HP' },
+  { id: 'manual', cat: 'Training', name: 'Drill manual', price: 150, mods: { dmg: 0.10 }, blurb: '+10% damage' },
+  { id: 'hands', cat: 'Training', name: 'Quick hands', price: 150, mods: { as: 0.10 }, blurb: '+10% attack speed' },
+  { id: 'scope', cat: 'Optics', name: 'Scope', price: 150, mods: { range: 25 }, blurb: '+25 attack range' }
+];
 var MATCH_LEN = 10 * 60;
 var TUNE = { cdMul: 0.7, acdMul: 0.8 };
 HEROES.forEach(function (h) {

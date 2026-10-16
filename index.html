@@ -302,6 +302,10 @@ body.online .cheat { display: none !important; }
   .orders { grid-template-columns: 1fr; }
   h1 { font-size: 28px; }
 }
+.shopSlots { display: flex; gap: 8px; flex-wrap: wrap; }
+.slot { min-width: 120px; padding: 8px 10px; border: 1px dashed rgba(214,203,170,0.35); border-radius: 6px; font-size: 13px; color: #B9B19A; }
+.slot.full { border-style: solid; color: #F1E9D2; }
+.shopRow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid rgba(214,203,170,0.12); }
 </style>
 </head>
 <body>
@@ -474,6 +478,27 @@ body.online .cheat { display: none !important; }
     </div>
   </div>
 
+  <div id="shopModal" class="overlay" hidden role="dialog" aria-label="Shop">
+    <div class="card plate" style="width:min(820px,100%)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="eyebrow" id="shopCash">Cash 0</div>
+          <h2>Supply shop</h2>
+        </div>
+        <span class="muted" id="shopHq"></span>
+      </div>
+      <div class="eyebrow">Slots</div>
+      <div class="shopSlots" id="shopSlots"></div>
+      <div id="shopCats"></div>
+      <div class="eyebrow">HQ stash</div>
+      <div id="shopStash"></div>
+      <div class="actions" style="justify-content:space-between">
+        <span class="muted">Stash <input id="shopAmt" type="number" min="1" value="100" style="width:90px"> <button type="button" class="btn" id="shopDep">Stash cash</button></span>
+        <button type="button" class="btn" id="shopClose">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="swapModal" class="overlay" hidden role="dialog" aria-label="Reassignment">
     <div class="card plate" style="width:min(900px,100%)">
       <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
@@ -638,6 +663,15 @@ var WALK_SHOOT = true;
 /* Cash: what each action pays. Stash take-outs pay STASH_CUT of the stashed amount; the HQ keeps the rest. */
 var CASH = { cs: 10, hero: 150, perLvl: 25, assist: 40, turret: 120, perOrder: 60 };
 var STASH_CUT = 0.8;
+/* Shop: five unique slots per hero, no stacking. mods adds to the hero's aug fields (hpMul, dmg, as, range). */
+var SHOP_SLOTS = 5;
+var SHOP_CATS = ['MREs', 'Training', 'Optics'];
+var SHOP_ITEMS = [
+  { id: 'ration', cat: 'MREs', name: 'Field ration', price: 120, mods: { hpMul: 0.10 }, blurb: '+10% max HP' },
+  { id: 'manual', cat: 'Training', name: 'Drill manual', price: 150, mods: { dmg: 0.10 }, blurb: '+10% damage' },
+  { id: 'hands', cat: 'Training', name: 'Quick hands', price: 150, mods: { as: 0.10 }, blurb: '+10% attack speed' },
+  { id: 'scope', cat: 'Optics', name: 'Scope', price: 150, mods: { range: 25 }, blurb: '+25 attack range' }
+];
 var MATCH_LEN = 10 * 60;
 var TUNE = { cdMul: 0.7, acdMul: 0.8 };
 HEROES.forEach(function (h) {
@@ -1115,7 +1149,7 @@ var opts = { ranges: false, god: false, nocd: false, passive: false, pause: fals
 /* roster: [{ team, hero, human, name, pid }]; returns G. Used offline and by the server. */
 function simNewGame(roster) {
   uid = 1;
-  G = { time: 0, units: [], structs: [], proj: [], lobs: [], mines: [], fx: [], texts: [], kills: [0, 0], nextWave: 3, wave: 0, stash: [],
+  G = { time: 0, units: [], structs: [], proj: [], lobs: [], mines: [], fx: [], texts: [], kills: [0, 0], nextWave: 3, wave: 0, stash: [], stashSeq: 0,
     crates: [], over: false, winner: -1, barrage: null, player: null, feed: [], toastT: 0, hurtT: 0, blockers: [], moveMark: null, rounds: [], shake: 0, ev: [] };
   makeStructs();
   makeCrates();
@@ -1155,7 +1189,7 @@ function addHero(spec, team, isPlayer, slot) {
     target: null, move: null, amove: null, facing: team === 0 ? 1 : -1, slowT: 0, slowAmt: 0, kvx: 0, kvy: 0, aaT: 0, burnT: 0, burnDps: 0,
     dash: null, cone: null, chan: null, tagMark: null, iframe: 0, aggroT: 0, kills: 0, deaths: 0, think: 0, retreat: false, offer: null, deathT: 0,
     walk: 0, movedT: 0, recoilT: 0, flashT: 0, fireT: 0, stagT: 0, lungeT: 0,
-    cash: 0, st: { k: 0, d: 0, a: 0, cs: 0, dmgH: 0, dmgS: 0, taken: 0, heal: 0, mit: 0, pos: 0, streak: 0, best: 0, cash: 0 }, dmgBy: {}, dmgLog: [] };
+    cash: 0, items: [], st: { k: 0, d: 0, a: 0, cs: 0, dmgH: 0, dmgS: 0, taken: 0, heal: 0, mit: 0, pos: 0, streak: 0, best: 0, cash: 0 }, dmgBy: {}, dmgLog: [] };
   u.hp = maxHp(u);
   G.units.push(u);
   return u;
@@ -1265,8 +1299,10 @@ function damage(src, tgt, amt, o) {
 }
 /* Stash at the HQ: a hero within reach of its own fort can deposit cash, and anyone on the team can take a stash out for STASH_CUT. */
 function atHq(u) { var hq = G.structs.find(function (s) { return s.kind === 'hq' && s.team === u.team && !s.dead; }); return hq && dist(u, hq) < 520 ? hq : null; }
-function depositCash(u, amt) { amt = Math.floor(amt); if (u.dead || !atHq(u) || amt <= 0 || amt > u.cash) return false; u.cash -= amt; G.stash.push({ owner: u.id, team: u.team, amt: amt }); return true; }
-function withdrawCash(u, idx) { var e = G.stash[idx]; if (!e || u.dead || e.team !== u.team || !atHq(u)) return false; G.stash.splice(idx, 1); u.cash += Math.floor(e.amt * STASH_CUT); return true; }
+function depositCash(u, amt) { amt = Math.floor(amt); if (u.dead || !atHq(u) || amt <= 0 || amt > u.cash) return false; u.cash -= amt; G.stashSeq = (G.stashSeq || 0) + 1; G.stash.push({ sid: G.stashSeq, owner: u.id, team: u.team, amt: amt }); return true; }
+function withdrawCash(u, sid) { var i = G.stash.findIndex(function (e) { return e.sid === sid; }); if (i < 0 || u.dead || G.stash[i].team !== u.team || !atHq(u)) return false; var e = G.stash[i]; G.stash.splice(i, 1); u.cash += Math.floor(e.amt * STASH_CUT); return true; }
+/* Buy one item from the shop. Only at the team's HQ, only with enough cash, one of each item, up to SHOP_SLOTS. */
+function buyItem(u, id) { var it = SHOP_ITEMS.find(function (x) { return x.id === id; }); if (!it || u.dead || !atHq(u) || u.cash < it.price || u.items.indexOf(id) >= 0 || u.items.length >= SHOP_SLOTS) return false; u.cash -= it.price; u.items.push(id); Object.keys(it.mods).forEach(function (k) { u.aug[k] = (u.aug[k] || 0) + it.mods[k]; }); return true; }
 /* At the buzzer, cash in hand and stashed cash count at face value into each hero's stats. */
 function tallyCash() { G.units.forEach(function (u) { if (u.kind !== 'hero') return; var st = 0; G.stash.forEach(function (e) { if (e.owner === u.id) st += e.amt; }); u.st.cash = u.cash + st; }); }
 function kill(src, tgt) {
@@ -3269,7 +3305,7 @@ document.addEventListener('keydown', unlockAudio, { once: true });
 cv.addEventListener('pointerdown', function (e) {
   if (!G) return;
   var r = cv.getBoundingClientRect();
-  if (e.pointerType === 'mouse') { order(e.clientX - r.left, e.clientY - r.top); return; }
+  if (e.pointerType === 'mouse') { var pw = s2w(e.clientX - r.left, e.clientY - r.top); if (ownHqAt(pw)) { openShop(); return; } order(e.clientX - r.left, e.clientY - r.top); return; }
   drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false };
 });
 cv.addEventListener('pointermove', function (e) {
@@ -3293,6 +3329,7 @@ window.addEventListener('keydown', function (e) {
   if (e.key === 'Tab') { e.preventDefault(); if (sbEl.hidden) openSB('hold'); return; }
   var k = e.key.toUpperCase();
   if (k === 'ESCAPE' && !sbEl.hidden) { closeSB(); return; }
+  if (!shopModal.hidden && k !== 'P' && k !== 'ESCAPE') return;
   if (['Q', 'W', 'E', 'R', 'D', 'F'].indexOf(k) >= 0) {
     if (!ordersModal.hidden) return;
     var w = mouse.inside ? s2w(mouse.x, mouse.y) : { x: G.player.x + G.player.facing * 200, y: G.player.y };
@@ -3303,7 +3340,9 @@ window.addEventListener('keydown', function (e) {
   else if (k === 'Y') { cam.lock = !cam.lock; showToast(cam.lock ? 'Camera locked' : 'Camera free', 1); }
   else if (k === 'O') { if (ordersModal.hidden) openOrders(); else ordersModal.hidden = true; }
   else if (k === 'C') { if (swapModal.hidden) openSwap(); else swapModal.hidden = true; }
+  else if (k === 'P') { toggleShop(); }
   else if (k === 'ESCAPE') {
+    if (!shopModal.hidden) { closeShop(); return; }
     if (aimSlot || aMovePending) { aimSlot = null; aMovePending = false; refreshAim(); }
     else if (!ordersModal.hidden || !swapModal.hidden) { ordersModal.hidden = true; swapModal.hidden = true; }
     else if (!menuEl.hidden) closeMenu(); else openMenu();
@@ -3535,6 +3574,66 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(start, sta
 
 window.__PF = { get G() { return G; }, get NET() { return NET; }, predDebug: predDebug, cmdTarget: cmdTarget, cmdMove: cmdMove, cmdCast: cmdCast, clearDir: clearDir, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };
 
+/* ===== 65-shop.js ===== */
+/* Supply shop: P (or clicking your own HQ) opens and closes it at any time. Buying and HQ stash
+   take-outs only work while your hero is at the team's fort; the server decides online, the sim offline. */
+var shopModal = document.getElementById('shopModal');
+var shopTimer = null;
+function shopState() {
+  if (NET.mode === 'online') return NET.shop || { cash: 0, items: [], stash: [], atHq: false };
+  var p = G && G.player; if (!p) return { cash: 0, items: [], stash: [], atHq: false };
+  var st = G.stash.filter(function (e) { return e.team === p.team; }).map(function (e) { var o = G.units.find(function (x) { return x.id === e.owner; }); return { sid: e.sid, amt: e.amt, owner: o ? (o.pname || o.name) : 'Someone', mine: e.owner === p.id }; });
+  return { cash: p.cash, items: p.items, stash: st, atHq: !!atHq(p) };
+}
+function shopAct(msg, local) { if (NET.mode === 'online') netSend(msg); else local(); renderShop(); }
+function shopBuy(id) { shopAct({ t: 'buy', id: id }, function () { buyItem(G.player, id); }); }
+function shopDeposit() { var v = parseInt(document.getElementById('shopAmt').value, 10); if (!(v > 0)) return; shopAct({ t: 'dep', amt: v }, function () { depositCash(G.player, v); }); }
+function shopWithdraw(sid) { shopAct({ t: 'wd', sid: sid }, function () { withdrawCash(G.player, sid); }); }
+function renderShop() {
+  if (shopModal.hidden) return;
+  var s = shopState();
+  document.getElementById('shopCash').textContent = 'Cash ' + s.cash;
+  document.getElementById('shopHq').textContent = s.atHq ? 'At your fort: you can buy and stash.' : 'Go to your fort to buy or stash cash.';
+  var slots = document.getElementById('shopSlots'); slots.innerHTML = '';
+  for (var i = 0; i < SHOP_SLOTS; i++) {
+    var id = s.items[i], it = id ? SHOP_ITEMS.find(function (x) { return x.id === id; }) : null;
+    var d = document.createElement('div'); d.className = 'slot' + (it ? ' full' : ''); d.textContent = it ? it.name : 'Empty'; slots.appendChild(d);
+  }
+  var cats = document.getElementById('shopCats'); cats.innerHTML = '';
+  SHOP_CATS.forEach(function (cat) {
+    var h = document.createElement('div'); h.className = 'eyebrow'; h.textContent = cat; cats.appendChild(h);
+    SHOP_ITEMS.filter(function (x) { return x.cat === cat; }).forEach(function (item) {
+      var owned = s.items.indexOf(item.id) >= 0;
+      var can = s.atHq && !owned && s.cash >= item.price && s.items.length < SHOP_SLOTS;
+      var row = document.createElement('div'); row.className = 'shopRow';
+      var label = document.createElement('span'); label.textContent = item.name + ' \u00b7 ' + item.blurb + ' \u00b7 ' + item.price;
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = owned ? 'Owned' : 'Buy'; b.disabled = !can;
+      b.addEventListener('click', function () { shopBuy(item.id); });
+      row.appendChild(label); row.appendChild(b); cats.appendChild(row);
+    });
+  });
+  var st = document.getElementById('shopStash'); st.innerHTML = '';
+  if (!s.stash.length) { st.textContent = 'No cash stashed.'; }
+  s.stash.forEach(function (e) {
+    var row = document.createElement('div'); row.className = 'shopRow';
+    var label = document.createElement('span'); label.textContent = e.owner + ' stashed ' + e.amt + (e.mine ? ' (yours)' : '');
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = 'Take out for ' + Math.floor(e.amt * STASH_CUT); b.disabled = !s.atHq;
+    b.addEventListener('click', function () { shopWithdraw(e.sid); });
+    row.appendChild(label); row.appendChild(b); st.appendChild(row);
+  });
+  document.getElementById('shopDep').disabled = !s.atHq;
+}
+function openShop() { if (!G) return; shopModal.hidden = false; renderShop(); if (!shopTimer) shopTimer = setInterval(renderShop, 250); }
+function closeShop() { shopModal.hidden = true; if (shopTimer) { clearInterval(shopTimer); shopTimer = null; } }
+function toggleShop() { if (shopModal.hidden) openShop(); else closeShop(); }
+function ownHqAt(w) {
+  if (!G) return false;
+  var hq = G.structs.find(function (s) { return s.kind === 'hq' && s.team === MYTEAM && !s.dead; });
+  return !!hq && Math.abs(w.x - hq.x) < 110 && w.y > hq.y - 230 && w.y < hq.y + 40;
+}
+document.getElementById('shopDep').addEventListener('click', shopDeposit);
+document.getElementById('shopClose').addEventListener('click', closeShop);
+
 /* ===== 70-net.js ===== */
 /* Browser only: online PvP. The server runs the match; this client sends commands and draws server snapshots. */
 var PF_DEFAULT_SERVER = 'wss://plastic-front.prestonmcgill.workers.dev/ws';   // the deployed game server on Cloudflare (see README); players can override it under Server
@@ -3611,6 +3710,7 @@ function netMsg(m) {
     case 'start': netStart(m); break;
     case 's': netSnap(m); break;
     case 'sb': netScore(m); break;
+    case 'shop': NET.shop = m; renderShop(); break;
     case 'names': m.n.forEach(function (a) { var u = NET.byId && NET.byId[a[0]]; if (u) { u.pname = a[1] || null; u.bot = !a[1]; } }); break;
     case 'pong': NETC.ping = Math.round(performance.now() - m.c); var pe = document.getElementById('pingEl'); pe.hidden = false; pe.textContent = NETC.ping + ' MS'; break;
   }

@@ -7,7 +7,7 @@ var opts = { ranges: false, god: false, nocd: false, passive: false, pause: fals
 /* roster: [{ team, hero, human, name, pid }]; returns G. Used offline and by the server. */
 function simNewGame(roster) {
   uid = 1;
-  G = { time: 0, units: [], structs: [], proj: [], lobs: [], mines: [], fx: [], texts: [], kills: [0, 0], nextWave: 3, wave: 0, stash: [],
+  G = { time: 0, units: [], structs: [], proj: [], lobs: [], mines: [], fx: [], texts: [], kills: [0, 0], nextWave: 3, wave: 0, stash: [], stashSeq: 0,
     crates: [], over: false, winner: -1, barrage: null, player: null, feed: [], toastT: 0, hurtT: 0, blockers: [], moveMark: null, rounds: [], shake: 0, ev: [] };
   makeStructs();
   makeCrates();
@@ -47,7 +47,7 @@ function addHero(spec, team, isPlayer, slot) {
     target: null, move: null, amove: null, facing: team === 0 ? 1 : -1, slowT: 0, slowAmt: 0, kvx: 0, kvy: 0, aaT: 0, burnT: 0, burnDps: 0,
     dash: null, cone: null, chan: null, tagMark: null, iframe: 0, aggroT: 0, kills: 0, deaths: 0, think: 0, retreat: false, offer: null, deathT: 0,
     walk: 0, movedT: 0, recoilT: 0, flashT: 0, fireT: 0, stagT: 0, lungeT: 0,
-    cash: 0, st: { k: 0, d: 0, a: 0, cs: 0, dmgH: 0, dmgS: 0, taken: 0, heal: 0, mit: 0, pos: 0, streak: 0, best: 0, cash: 0 }, dmgBy: {}, dmgLog: [] };
+    cash: 0, items: [], st: { k: 0, d: 0, a: 0, cs: 0, dmgH: 0, dmgS: 0, taken: 0, heal: 0, mit: 0, pos: 0, streak: 0, best: 0, cash: 0 }, dmgBy: {}, dmgLog: [] };
   u.hp = maxHp(u);
   G.units.push(u);
   return u;
@@ -157,8 +157,10 @@ function damage(src, tgt, amt, o) {
 }
 /* Stash at the HQ: a hero within reach of its own fort can deposit cash, and anyone on the team can take a stash out for STASH_CUT. */
 function atHq(u) { var hq = G.structs.find(function (s) { return s.kind === 'hq' && s.team === u.team && !s.dead; }); return hq && dist(u, hq) < 520 ? hq : null; }
-function depositCash(u, amt) { amt = Math.floor(amt); if (u.dead || !atHq(u) || amt <= 0 || amt > u.cash) return false; u.cash -= amt; G.stash.push({ owner: u.id, team: u.team, amt: amt }); return true; }
-function withdrawCash(u, idx) { var e = G.stash[idx]; if (!e || u.dead || e.team !== u.team || !atHq(u)) return false; G.stash.splice(idx, 1); u.cash += Math.floor(e.amt * STASH_CUT); return true; }
+function depositCash(u, amt) { amt = Math.floor(amt); if (u.dead || !atHq(u) || amt <= 0 || amt > u.cash) return false; u.cash -= amt; G.stashSeq = (G.stashSeq || 0) + 1; G.stash.push({ sid: G.stashSeq, owner: u.id, team: u.team, amt: amt }); return true; }
+function withdrawCash(u, sid) { var i = G.stash.findIndex(function (e) { return e.sid === sid; }); if (i < 0 || u.dead || G.stash[i].team !== u.team || !atHq(u)) return false; var e = G.stash[i]; G.stash.splice(i, 1); u.cash += Math.floor(e.amt * STASH_CUT); return true; }
+/* Buy one item from the shop. Only at the team's HQ, only with enough cash, one of each item, up to SHOP_SLOTS. */
+function buyItem(u, id) { var it = SHOP_ITEMS.find(function (x) { return x.id === id; }); if (!it || u.dead || !atHq(u) || u.cash < it.price || u.items.indexOf(id) >= 0 || u.items.length >= SHOP_SLOTS) return false; u.cash -= it.price; u.items.push(id); Object.keys(it.mods).forEach(function (k) { u.aug[k] = (u.aug[k] || 0) + it.mods[k]; }); return true; }
 /* At the buzzer, cash in hand and stashed cash count at face value into each hero's stats. */
 function tallyCash() { G.units.forEach(function (u) { if (u.kind !== 'hero') return; var st = 0; G.stash.forEach(function (e) { if (e.owner === u.id) st += e.amt; }); u.st.cash = u.cash + st; }); }
 function kill(src, tgt) {

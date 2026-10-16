@@ -57,7 +57,7 @@ check('a teammate takes out someone else\'s stash and gets 80%', () => {
   const owner = heroOf(S, 0, 0), taker = heroOf(S, 0, 1);
   owner.cash = 1000; standAtHq(S, owner); S.depositCash(owner, 1000);
   standAtHq(S, taker); taker.cash = 0;
-  assert.strictEqual(S.withdrawCash(taker, 0), true);
+  assert.strictEqual(S.withdrawCash(taker, S.G.stash[0].sid), true);
   assert.strictEqual(taker.cash, 800, 'taker gets 80%');
   assert.strictEqual(owner.cash, 0, 'owner gets nothing back');
   assert.strictEqual(S.G.stash.length, 0);
@@ -68,7 +68,7 @@ check('an enemy cannot take a stash out', () => {
   const owner = heroOf(S, 0, 0), enemy = heroOf(S, 1, 0);
   owner.cash = 500; standAtHq(S, owner); S.depositCash(owner, 500);
   standAtHq(S, enemy); enemy.cash = 0;
-  assert.strictEqual(S.withdrawCash(enemy, 0), false);
+  assert.strictEqual(S.withdrawCash(enemy, S.G.stash[0].sid), false);
   assert.strictEqual(enemy.cash, 0);
 });
 
@@ -80,6 +80,34 @@ check('at the buzzer cash in hand and stashed cash count at face value into stat
   S.update(0.1);
   assert.strictEqual(hero.st.cash, 300, 'held 100 + stashed 200 at face value');
   assert.strictEqual(S.G.over, true);
+});
+
+check('shop: buy needs HQ, cash, a free slot and no duplicate', () => {
+  const S = fresh();
+  const hero = heroOf(S, 0, 0);
+  hero.cash = 1000; hero.x = 3000; hero.y = 3000;
+  assert.strictEqual(S.buyItem(hero, 'ration'), false, 'not at HQ');
+  standAtHq(S, hero);
+  assert.strictEqual(S.buyItem(hero, 'ration'), true);
+  assert.strictEqual(hero.cash, 880);
+  assert.strictEqual(S.buyItem(hero, 'ration'), false, 'no duplicates');
+  assert.ok(Math.abs(hero.aug.hpMul - 0.10) < 1e-9, 'mod applied');
+  hero.cash = 9999; S.buyItem(hero, 'manual'); S.buyItem(hero, 'hands'); S.buyItem(hero, 'scope');
+  assert.strictEqual(hero.items.length, 4);
+  hero.cash = 9999; S.buyItem(hero, 'manual');
+  assert.strictEqual(hero.items.length, 4, 'no second copy');
+});
+
+check('shop: a sixth item is refused', () => {
+  const S = fresh();
+  const hero = heroOf(S, 0, 0);
+  hero.cash = 99999; standAtHq(S, hero);
+  ['ration', 'manual', 'hands', 'scope'].forEach(id => S.buyItem(hero, id));
+  S.SHOP_ITEMS.push({ id: 'x1', cat: 'MREs', name: 'x', price: 1, mods: {}, blurb: '' });
+  S.SHOP_ITEMS.push({ id: 'x2', cat: 'MREs', name: 'x', price: 1, mods: {}, blurb: '' });
+  assert.strictEqual(hero.items.length, 4);
+  assert.strictEqual(S.buyItem(hero, 'x1'), true);
+  assert.strictEqual(S.buyItem(hero, 'x2'), false, 'slot cap is 5 items, so the 6th is refused');
 });
 
 console.log(fails ? fails + ' failed' : 'all economy checks passed');
