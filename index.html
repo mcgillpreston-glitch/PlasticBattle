@@ -1583,8 +1583,6 @@ function freePoint(p, r) {
   return { x: tmp.x, y: tmp.y };
 }
 function stepToward(u, x, y, step, stopAt) {
-  /* Keep the goal on walkable ground with room for this unit: a goal on the field edge (e.g. an enemy standing by the edge) pins the unit against it. */
-  var g = clampField({ x: x, y: y }, (u.r || 10) + 4); x = g.x; y = g.y;
   var d = vlen(x - u.x, y - u.y);
   if (d <= stopAt + 0.5) { u.path = null; return true; }
   var wx = x, wy = y, straight;
