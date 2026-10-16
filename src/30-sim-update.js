@@ -262,8 +262,11 @@ function minionAI(m, dt) {
   }
   m.aim = 0.4;
   var best = null, bd = 1e9;
+  /* Once the enemy lane has no turrets left, lane minions push past enemy heroes to the fort instead of stopping to fight them. */
+  var pushing = !laneOpen(1 - m.team, m.lane);
   G.units.forEach(function (e) {
     if (e.team === m.team || e.dead || !visibleTo(e, m.team)) return;
+    if (e.kind === 'hero' && pushing) return;
     var d = dist(e, m) + (e.kind === 'hero' ? 160 : 0);
     if (d < 460 && d < bd) { bd = d; best = e; }
   });
