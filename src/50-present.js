@@ -99,7 +99,7 @@ function present(e) {
       if (NET.mode === 'online') { u.spec = ns; u.pose = ns.key; u.name = ns.name; u.cd = { Q: 0, W: 0, E: 0, R: 0, D: 0, F: 0 }; u.cdMax = { Q: 1, W: 1, E: 1, R: 1, D: 1, F: 1 }; u.buffs = []; u._mh = ns.hp; u._rng = ns.range; u._acd = ns.acd; }
       if (isMe(e[1])) { buildAbilityBar(); showAlert('REASSIGNED \u00b7 RETURNING AS ' + ns.name.toUpperCase(), 'good'); playSfx('ui'); if (!swapModal.hidden) swapModal.hidden = true; }
       break;
-    case 'end': showEnd(e[1]); break;
+    case 'end': showEnd(e[1], e[2]); break;
   }
 }
 function presentLocal() { if (!G || !G.ev || !G.ev.length) return; var evs = G.ev; G.ev = []; evs.forEach(present); }
@@ -213,13 +213,15 @@ function updateAlerts(dt) {
   var a = ALERT.q.shift(); ALERT.el.textContent = a.txt; ALERT.el.className = 'hud on ' + a.cls; ALERT.el.hidden = false; ALERT.t = 2.4;
   if (a.cls === 'bad') playSfx('alert');
 }
-function showEnd(winner) {
+function showEnd(winner, reason) {
   if (!G) return;
   G.over = true; G.winner = winner;
-  var p = G.player, won = winner === MYTEAM, st = (p && p.st) || { k: 0, d: 0 };
-  document.getElementById('endTitle').textContent = won ? 'Mission accomplished' : 'Mission failed';
-  document.getElementById('endEyebrow').textContent = winner === 0 ? 'Tan bucket bunker destroyed · Green wins' : 'Green sand fort destroyed · Tan wins';
-  showAlert(won ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED', won ? 'good' : 'bad');
+  var p = G.player, won = winner === MYTEAM, st = (p && p.st) || { k: 0, d: 0 }, draw = winner === -1, timed = reason === 'time';
+  var title = draw ? 'Time\u2019s up' : won ? 'Mission accomplished' : 'Mission failed';
+  var eyebrow = draw ? 'Ten minutes · both forts still standing level · Draw' : timed ? (winner === 0 ? 'Ten minutes · Green holds more fort strength · Green wins' : 'Ten minutes · Tan holds more fort strength · Tan wins') : (winner === 0 ? 'Tan bucket bunker destroyed · Green wins' : 'Green sand fort destroyed · Tan wins');
+  document.getElementById('endTitle').textContent = title;
+  document.getElementById('endEyebrow').textContent = eyebrow;
+  showAlert(draw ? 'TIME\u2019S UP' : won ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED', draw ? 'info' : won ? 'good' : 'bad');
   document.getElementById('endStats').textContent = 'Match time ' + fmtTime(G.time) + ' · You fought as ' + (p ? p.name : '-') + ' · ' + st.k + ' kills, ' + st.d + ' casualties · Level ' + (p ? p.lvl : '-');
   document.getElementById('again').textContent = NET.mode === 'online' ? 'Back to lobby' : 'Roll call';
   document.getElementById('endModal').hidden = false;

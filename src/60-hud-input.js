@@ -156,7 +156,7 @@ function renderSB() {
   });
   var tot = teams[0].dmgH + teams[1].dmgH || 1;
   document.getElementById('sbTug').innerHTML = '<i style="width:' + (100 * teams[0].dmgH / tot).toFixed(1) + '%;background:var(--green)"></i><i style="flex:1;background:var(--tan)"></i>';
-  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b></span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Sprinkler on</b></span>' : '<span>Sprinkler at <b>18:00</b></span>');
+  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b> / ' + fmtTime(MATCH_LEN) + '</span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Sprinkler on</b></span>' : '<span>Sprinkler at <b>18:00</b></span>');
   var html = '';
   teams.forEach(function (T) {
     var cls = T.team === 0 ? 'g' : 't', name = T.team === 0 ? 'Green Army' : 'Tan Army';
@@ -346,6 +346,7 @@ function openMenu() {
   document.getElementById('mLowRes').checked = !!opts.lowRes;
   document.getElementById('mFps').checked = !document.getElementById('dev').hidden;
   document.getElementById('mShake').checked = !opts.noShake;
+  document.getElementById('mEdge').value = opts.edge == null ? 50 : opts.edge;
   document.getElementById('mHelp').checked = !document.getElementById('help').hidden;
   document.getElementById('mLeave').textContent = NET.mode === 'online' ? 'Leave the room' : 'Leave to roll call';
   menuEl.hidden = false;
@@ -357,6 +358,7 @@ document.getElementById('mVol').addEventListener('input', function (e) { opts.vo
 document.getElementById('mLowRes').addEventListener('change', function (e) { opts.lowRes = e.target.checked; lsSet('pf_lowres', opts.lowRes ? '1' : '0'); resize(); });
 document.getElementById('mFps').addEventListener('change', function (e) { document.getElementById('dev').hidden = !e.target.checked; lsSet('pf_fps', e.target.checked ? '1' : '0'); });
 document.getElementById('mShake').addEventListener('change', function (e) { opts.noShake = !e.target.checked; lsSet('pf_shake', e.target.checked ? '1' : '0'); });
+document.getElementById('mEdge').addEventListener('input', function (e) { opts.edge = Number(e.target.value); lsSet('pf_edge', String(opts.edge)); });
 document.getElementById('mHelp').addEventListener('change', function (e) { document.getElementById('help').hidden = !e.target.checked; lsSet('pf_help', e.target.checked ? '1' : '0'); });
 document.getElementById('mCopy').addEventListener('click', function () { document.getElementById('lCopy').click(); this.textContent = 'Copied'; var b = this; setTimeout(function () { b.textContent = 'Copy invite link'; }, 1500); });
 document.getElementById('mLeave').addEventListener('click', function () {
@@ -369,6 +371,7 @@ document.getElementById('mLeave').addEventListener('click', function () {
   var v = parseFloat(lsGet('pf_volume')); if (!isNaN(v)) opts.volume = v;
   if (lsGet('pf_lowres') === '1') opts.lowRes = true;
   if (lsGet('pf_shake') === '0') opts.noShake = true;
+  var ev = parseFloat(lsGet('pf_edge')); if (!isNaN(ev)) opts.edge = ev;
   if (lsGet('pf_fps') === '0') document.getElementById('dev').hidden = true;
 })();
 
@@ -449,6 +452,14 @@ function frame(now) {
     if (cam.lock) {
       var dead = G.player.dead, tgt = dead ? (G.death && G.player.respawn > 1.6 ? G.death : fountain(MYTEAM)) : G.player, k = Math.min(1, raw * (dead ? 3.5 : 14));
       cam.x += (tgt.x - cam.x) * k; cam.y += (tgt.y - cam.y) * k;
+    }
+    // edge scroll: a mouse in the band along a screen edge pans the camera; the closer to the edge, the faster. Speed comes from the menu setting.
+    var edgeV = opts.edge == null ? 50 : opts.edge;
+    if (edgeV > 0 && mouse.inside && !drag && menuEl.hidden && draftEl.hidden && ordersModal.hidden && swapModal.hidden) {
+      var band = 28, ex = 0, ey = 0;
+      if (mouse.x < band) ex = -(band - mouse.x) / band; else if (mouse.x > VW - band) ex = (mouse.x - (VW - band)) / band;
+      if (mouse.y < band) ey = -(band - mouse.y) / band; else if (mouse.y > VH - band) ey = (mouse.y - (VH - band)) / band;
+      if (ex || ey) { cam.lock = false; var sp = edgeV * 8 * raw / cam.z; cam.x += ex * sp; cam.y += ey * sp; }
     }
     // keep the view on the painted sandbox: never show past its edges (centred when the view is wider than the map)
     var hw = VW / 2 / cam.z, hh = VH / 2 / cam.z;

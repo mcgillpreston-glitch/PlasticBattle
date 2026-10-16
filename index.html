@@ -504,6 +504,7 @@ body.online .cheat { display: none !important; }
         <label><input type="checkbox" id="mLowRes"> Low resolution (faster on weak GPUs)</label>
         <label><input type="checkbox" id="mFps" checked> Show FPS and range control</label>
         <label><input type="checkbox" id="mShake" checked> Screen shake</label>
+        <label class="field">Edge scroll (mouse at the screen edge pans the map; 0 = off) <input type="range" id="mEdge" min="0" max="100" value="50"></label>
         <label><input type="checkbox" id="mHelp" checked> Show the controls strip</label>
       </div>
       <div class="actions" style="justify-content:space-between">
@@ -629,6 +630,12 @@ var HEROES = [
   R:{n:'Night Raid',t:'buff',cd:45,dur:4,b:{ms:.4,dmgMul:.4,ghost:1}}}
 ];
 /* Tuning pass: ability cooldowns are 30% shorter and the gap between basic shots 20% shorter (the hero table above keeps the design numbers). */
+/* Match length in seconds. At the buzzer the fort with more structure HP left wins; level HP is a draw. */
+/* Turret pressure: each enemy turret a team has destroyed on a lane adds `perTurret` rifle to that team's waves on that lane, up to `max`. */
+var RAMP = { perTurret: 1, max: 3 };
+/* Minions keep advancing along their lane while they fire, instead of stopping at first contact. */
+var WALK_SHOOT = true;
+var MATCH_LEN = 10 * 60;
 var TUNE = { cdMul: 0.7, acdMul: 0.8 };
 HEROES.forEach(function (h) {
   h.acd = Math.round(h.acd * TUNE.acdMul * 100) / 100;
@@ -1173,6 +1180,9 @@ function spawnWave() {
     for (var lane = 0; lane < LANES.length; lane++) {
       for (var i = 0; i < 2; i++) addMinion(team, 'melee', lane);
       for (var k = 0; k < 2; k++) addMinion(team, 'rifle', lane);
+      var fallen = G.structs.filter(function (s) { return s.team === 1 - team && s.lane === lane && s.kind === 'outpost' && s.dead; }).length;
+      var extra = Math.min(RAMP.max, fallen * RAMP.perTurret);
+      for (var x = 0; x < extra; x++) addMinion(team, 'rifle', lane);
       if (G.wave % 3 === 0) addMinion(team, (G.wave / 3) % 3 === lane ? 'tank' : 'mortar', lane);
       if (laneOpen(1 - team, lane)) addMinion(team, 'jeep', lane);
     }
@@ -1706,6 +1716,7 @@ function alliesNear(u, r) { return G.units.filter(function (a) { return a.team =
 function update(dt) {
   if (!G || G.over) return;
   G.time += dt;
+  if (G.time >= MATCH_LEN) { timeUp(); return; }
   G.nextWave -= dt;
   if (G.nextWave <= 0) { spawnWave(); G.nextWave = 25; }
 
@@ -1852,6 +1863,7 @@ function updateUnit(u, dt) {
     var dd = dist(u, tgt);
     if (dd <= rng) {
       u.path = null;
+      if (u.kind === 'minion' && WALK_SHOOT && u.move && spd > 0) { wantMove = true; stepToward(u, u.move.x, u.move.y, spd * dt, 4); }
       if (Math.abs(tgt.x - u.x) > 4) u.facing = tgt.x < u.x ? -1 : 1;
       if (u.aaT <= 0 && !u.cone && !u.chan) {
         if (!u.wind || u.wind.tgt !== tgt) u.wind = { tgt: tgt, t: 0, dur: windTime(u) };
@@ -1969,7 +1981,7 @@ function minionAI(m, dt) {
   });
   if (!best) G.structs.forEach(function (s) { if (s.team !== m.team && targetable(s) && dist(s, m) < 460 + s.r) best = s; });
   m.target = best;
-  if (!best) {
+  if (!best || WALK_SHOOT) {
     var q = laneProj(m, m.lane), nt = q.t + (m.team === 0 ? 0.08 : -0.08);
     m.move = freePoint(lanePt(nt, clamp(q.off, -60, 60), m.lane), m.r);
   }
@@ -2101,6 +2113,14 @@ function startBarrage() {
   for (var li = 0; li < LANES.length; li++) { G.barrage.beams.push({ t: 0.5, dir: -1, acc: li * 0.05, lane: li }); G.barrage.beams.push({ t: 0.5, dir: 1, acc: 0.15 + li * 0.05, lane: li }); }
   emit('sprinkler');
   feed('The sprinkler came on: water sweeping out from the centre', '');
+}
+/* Buzzer: compare the structure HP each side has left. Within 2% counts as a draw. */
+function timeUp() {
+  var hp = [0, 0], mx = [0, 0];
+  G.structs.forEach(function (s) { if (!s.dead) hp[s.team] += s.hp; mx[s.team] += s.maxHp; });
+  var f0 = mx[0] ? hp[0] / mx[0] : 0, f1 = mx[1] ? hp[1] / mx[1] : 0;
+  var winner = Math.abs(f0 - f1) < 0.02 ? -1 : (f0 > f1 ? 0 : 1);
+  G.over = true; G.winner = winner; emit('end', winner, 'time');
 }
 function updateBarrage(dt) {
   if (!G.barrage && G.time > 18 * 60) startBarrage();
@@ -2322,8 +2342,22 @@ function drawOverlays(shx, shy) {
     var hh = unitH(u);
     if (u.kind === 'hero') {
       bar(u.x, u.y - hh - 16, 84, 8, u.hp / maxHp(u), u.team, null, u.shield / maxHp(u), u.lvl);
-      ctx.font = '400 11px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = u.team === MYTEAM ? '#CFF5D3' : '#FFD6D2'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-      var nm = u.isPlayer ? 'YOU' : (u.pname ? u.pname.toUpperCase() : u.name.toUpperCase()); ctx.strokeText(nm, u.x, u.y - hh - 23); ctx.fillText(nm, u.x, u.y - hh - 23);
+      var human = !u.bot, tc = u.team === MYTEAM ? '110,200,120' : '235,90,70';
+      if (human && !u.isPlayer) {
+        ctx.setLineDash([]); ctx.fillStyle = 'rgba(' + tc + ',0.28)'; ell(ctx, u.x, u.y + 2, 46, 18); ctx.fill();
+        ctx.strokeStyle = 'rgba(' + tc + ',0.98)'; ctx.lineWidth = 5; ell(ctx, u.x, u.y + 2, 46, 18); ctx.stroke();
+      }
+      var nm = u.isPlayer ? 'YOU' : (u.pname ? u.pname.toUpperCase() : u.name.toUpperCase());
+      if (human) {
+        ctx.font = '400 13px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        var tw = ctx.measureText(nm).width + 16, ly = u.y - hh - 27;
+        ctx.fillStyle = 'rgba(' + tc + ',0.95)'; rrect(ctx, u.x - tw / 2, ly - 10, tw, 20, 6); ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; rrect(ctx, u.x - tw / 2, ly - 10, tw, 20, 6); ctx.stroke();
+        ctx.fillStyle = '#FFFFFF'; ctx.fillText(nm, u.x, ly + 1); ctx.textBaseline = 'alphabetic';
+      } else {
+        ctx.font = '400 11px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = u.team === MYTEAM ? '#CFF5D3' : '#FFD6D2'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+        ctx.strokeText(nm, u.x, u.y - hh - 23); ctx.fillText(nm, u.x, u.y - hh - 23);
+      }
     } else bar(u.x, u.y - hh - 10, 40, 4, u.hp / u.maxHp, u.team);
   });
   if (G.player && !G.player.dead) {
@@ -2333,6 +2367,24 @@ function drawOverlays(shx, shy) {
   G.fx.forEach(function (f) { if (f.k === 'callout') drawFx(f); });
   G.texts.forEach(function (t) { var pop = t.t < 0.1 ? 1.5 - t.t * 5 : 1; ctx.save(); ctx.translate(t.x, t.y); ctx.scale(pop, pop); ctx.globalAlpha = t.t < 0.6 ? 1 : 1 - (t.t - 0.6) / 0.3; ctx.font = '400 ' + (t.big ? 24 : 17) + 'px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(t.txt, 0, 0); ctx.fillStyle = t.color; ctx.fillText(t.txt, 0, 0); ctx.restore(); ctx.globalAlpha = 1; });
   ctx.restore();
+  drawEdgeMarkers();
+}
+/* Arrows pinned to the screen edge that point at human heroes currently outside the view. */
+function drawEdgeMarkers() {
+  if (!G || !G.units) return;
+  var pad = 36, cx = viewCX(), cy = VH / 2;
+  G.units.forEach(function (u) {
+    if (u.kind !== 'hero' || u.dead || u.bot || u.isPlayer || !visibleTo(u, MYTEAM)) return;
+    var p = w2s(u.x, u.y);
+    if (p.x >= pad && p.x <= VW - pad && p.y >= pad && p.y <= VH - pad) return;
+    var dx = p.x - cx, dy = p.y - cy;
+    var k = Math.min((cx - pad) / Math.max(1, Math.abs(dx)), (cy - pad) / Math.max(1, Math.abs(dy)));
+    var col = u.team === MYTEAM ? '110,200,120' : '235,90,70';
+    ctx.save(); ctx.translate(cx + dx * k, cy + dy * k); ctx.rotate(Math.atan2(dy, dx));
+    ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-10, -13); ctx.lineTo(-10, 13); ctx.closePath();
+    ctx.fillStyle = 'rgba(' + col + ',0.98)'; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 3; ctx.fill(); ctx.stroke();
+    ctx.restore();
+  });
 }
 /* Thermal feed while reinforcing: the scene is downsampled, heat is painted onto bodies, shots and blasts, and every pixel is mapped through an ironbow palette (cold blue to white-hot). */
 var THERM = { cv: null, x: null, lut: null, scan: null, seed: 1 };
@@ -2732,7 +2784,7 @@ function drawMini() {
   BRUSH.forEach(function (b) { mctx.fillStyle = 'rgba(120,230,90,0.35)'; ell(mctx, b.x, b.y, b.rx, b.ry); mctx.fill(); });
   G.structs.forEach(function (s) { mctx.fillStyle = s.dead ? '#3A3A30' : s.team === MYTEAM ? '#5BD66B' : '#F0453A'; var z = s.kind === 'hq' ? 76 : 50; mctx.fillRect(s.x - z / 2, s.y - z / 2, z, z); });
   if (G.barrage) G.barrage.beams.forEach(function (b) { if (b.x == null) return; mctx.strokeStyle = '#7EC8FF'; mctx.lineWidth = 10; mctx.beginPath(); mctx.arc(b.x, b.y, G.barrage.r, 0, Math.PI * 2); mctx.stroke(); });
-  G.units.forEach(function (u) { if (u.dead || !visibleTo(u, MYTEAM)) return; mctx.fillStyle = u.isPlayer ? '#FFFFFF' : u.team === MYTEAM ? '#5BD66B' : '#F0453A'; var z = u.kind === 'hero' ? 46 : 22; mctx.beginPath(); mctx.arc(u.x, u.y, z / 2, 0, Math.PI * 2); mctx.fill(); });
+  G.units.forEach(function (u) { if (u.dead || !visibleTo(u, MYTEAM)) return; mctx.fillStyle = u.isPlayer ? '#FFFFFF' : u.team === MYTEAM ? '#5BD66B' : '#F0453A'; var hum = u.kind === 'hero' && !u.bot, z = u.kind === 'hero' ? (hum ? 66 : 46) : 22; mctx.beginPath(); mctx.arc(u.x, u.y, z / 2, 0, Math.PI * 2); mctx.fill(); if (hum) { mctx.strokeStyle = '#FFFFFF'; mctx.lineWidth = 7; mctx.stroke(); } });
   mctx.strokeStyle = 'rgba(255,255,255,0.85)'; mctx.lineWidth = 8; mctx.strokeRect(cam.x - (VW - SIDE_W) / 2 / cam.z, cam.y - VH / 2 / cam.z, (VW - SIDE_W) / cam.z, VH / cam.z);
   mctx.restore();
   mctx.strokeStyle = 'rgba(80,200,90,0.18)'; mctx.lineWidth = 1;
@@ -2844,7 +2896,7 @@ function present(e) {
       if (NET.mode === 'online') { u.spec = ns; u.pose = ns.key; u.name = ns.name; u.cd = { Q: 0, W: 0, E: 0, R: 0, D: 0, F: 0 }; u.cdMax = { Q: 1, W: 1, E: 1, R: 1, D: 1, F: 1 }; u.buffs = []; u._mh = ns.hp; u._rng = ns.range; u._acd = ns.acd; }
       if (isMe(e[1])) { buildAbilityBar(); showAlert('REASSIGNED \u00b7 RETURNING AS ' + ns.name.toUpperCase(), 'good'); playSfx('ui'); if (!swapModal.hidden) swapModal.hidden = true; }
       break;
-    case 'end': showEnd(e[1]); break;
+    case 'end': showEnd(e[1], e[2]); break;
   }
 }
 function presentLocal() { if (!G || !G.ev || !G.ev.length) return; var evs = G.ev; G.ev = []; evs.forEach(present); }
@@ -2958,13 +3010,15 @@ function updateAlerts(dt) {
   var a = ALERT.q.shift(); ALERT.el.textContent = a.txt; ALERT.el.className = 'hud on ' + a.cls; ALERT.el.hidden = false; ALERT.t = 2.4;
   if (a.cls === 'bad') playSfx('alert');
 }
-function showEnd(winner) {
+function showEnd(winner, reason) {
   if (!G) return;
   G.over = true; G.winner = winner;
-  var p = G.player, won = winner === MYTEAM, st = (p && p.st) || { k: 0, d: 0 };
-  document.getElementById('endTitle').textContent = won ? 'Mission accomplished' : 'Mission failed';
-  document.getElementById('endEyebrow').textContent = winner === 0 ? 'Tan bucket bunker destroyed · Green wins' : 'Green sand fort destroyed · Tan wins';
-  showAlert(won ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED', won ? 'good' : 'bad');
+  var p = G.player, won = winner === MYTEAM, st = (p && p.st) || { k: 0, d: 0 }, draw = winner === -1, timed = reason === 'time';
+  var title = draw ? 'Time\u2019s up' : won ? 'Mission accomplished' : 'Mission failed';
+  var eyebrow = draw ? 'Ten minutes · both forts still standing level · Draw' : timed ? (winner === 0 ? 'Ten minutes · Green holds more fort strength · Green wins' : 'Ten minutes · Tan holds more fort strength · Tan wins') : (winner === 0 ? 'Tan bucket bunker destroyed · Green wins' : 'Green sand fort destroyed · Tan wins');
+  document.getElementById('endTitle').textContent = title;
+  document.getElementById('endEyebrow').textContent = eyebrow;
+  showAlert(draw ? 'TIME\u2019S UP' : won ? 'MISSION ACCOMPLISHED' : 'MISSION FAILED', draw ? 'info' : won ? 'good' : 'bad');
   document.getElementById('endStats').textContent = 'Match time ' + fmtTime(G.time) + ' · You fought as ' + (p ? p.name : '-') + ' · ' + st.k + ' kills, ' + st.d + ' casualties · Level ' + (p ? p.lvl : '-');
   document.getElementById('again').textContent = NET.mode === 'online' ? 'Back to lobby' : 'Roll call';
   document.getElementById('endModal').hidden = false;
@@ -3130,7 +3184,7 @@ function renderSB() {
   });
   var tot = teams[0].dmgH + teams[1].dmgH || 1;
   document.getElementById('sbTug').innerHTML = '<i style="width:' + (100 * teams[0].dmgH / tot).toFixed(1) + '%;background:var(--green)"></i><i style="flex:1;background:var(--tan)"></i>';
-  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b></span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Sprinkler on</b></span>' : '<span>Sprinkler at <b>18:00</b></span>');
+  document.getElementById('sbMeta').innerHTML = '<span>Time <b>' + fmtTime(G.time) + '</b> / ' + fmtTime(MATCH_LEN) + '</span><span>Wave <b>' + G.wave + '</b></span><span>Next wave <b>' + Math.max(0, Math.ceil(G.nextWave)) + 's</b></span>' + (G.barrage ? '<span><b>Sprinkler on</b></span>' : '<span>Sprinkler at <b>18:00</b></span>');
   var html = '';
   teams.forEach(function (T) {
     var cls = T.team === 0 ? 'g' : 't', name = T.team === 0 ? 'Green Army' : 'Tan Army';
@@ -3320,6 +3374,7 @@ function openMenu() {
   document.getElementById('mLowRes').checked = !!opts.lowRes;
   document.getElementById('mFps').checked = !document.getElementById('dev').hidden;
   document.getElementById('mShake').checked = !opts.noShake;
+  document.getElementById('mEdge').value = opts.edge == null ? 50 : opts.edge;
   document.getElementById('mHelp').checked = !document.getElementById('help').hidden;
   document.getElementById('mLeave').textContent = NET.mode === 'online' ? 'Leave the room' : 'Leave to roll call';
   menuEl.hidden = false;
@@ -3331,6 +3386,7 @@ document.getElementById('mVol').addEventListener('input', function (e) { opts.vo
 document.getElementById('mLowRes').addEventListener('change', function (e) { opts.lowRes = e.target.checked; lsSet('pf_lowres', opts.lowRes ? '1' : '0'); resize(); });
 document.getElementById('mFps').addEventListener('change', function (e) { document.getElementById('dev').hidden = !e.target.checked; lsSet('pf_fps', e.target.checked ? '1' : '0'); });
 document.getElementById('mShake').addEventListener('change', function (e) { opts.noShake = !e.target.checked; lsSet('pf_shake', e.target.checked ? '1' : '0'); });
+document.getElementById('mEdge').addEventListener('input', function (e) { opts.edge = Number(e.target.value); lsSet('pf_edge', String(opts.edge)); });
 document.getElementById('mHelp').addEventListener('change', function (e) { document.getElementById('help').hidden = !e.target.checked; lsSet('pf_help', e.target.checked ? '1' : '0'); });
 document.getElementById('mCopy').addEventListener('click', function () { document.getElementById('lCopy').click(); this.textContent = 'Copied'; var b = this; setTimeout(function () { b.textContent = 'Copy invite link'; }, 1500); });
 document.getElementById('mLeave').addEventListener('click', function () {
@@ -3343,6 +3399,7 @@ document.getElementById('mLeave').addEventListener('click', function () {
   var v = parseFloat(lsGet('pf_volume')); if (!isNaN(v)) opts.volume = v;
   if (lsGet('pf_lowres') === '1') opts.lowRes = true;
   if (lsGet('pf_shake') === '0') opts.noShake = true;
+  var ev = parseFloat(lsGet('pf_edge')); if (!isNaN(ev)) opts.edge = ev;
   if (lsGet('pf_fps') === '0') document.getElementById('dev').hidden = true;
 })();
 
@@ -3423,6 +3480,14 @@ function frame(now) {
     if (cam.lock) {
       var dead = G.player.dead, tgt = dead ? (G.death && G.player.respawn > 1.6 ? G.death : fountain(MYTEAM)) : G.player, k = Math.min(1, raw * (dead ? 3.5 : 14));
       cam.x += (tgt.x - cam.x) * k; cam.y += (tgt.y - cam.y) * k;
+    }
+    // edge scroll: a mouse in the band along a screen edge pans the camera; the closer to the edge, the faster. Speed comes from the menu setting.
+    var edgeV = opts.edge == null ? 50 : opts.edge;
+    if (edgeV > 0 && mouse.inside && !drag && menuEl.hidden && draftEl.hidden && ordersModal.hidden && swapModal.hidden) {
+      var band = 28, ex = 0, ey = 0;
+      if (mouse.x < band) ex = -(band - mouse.x) / band; else if (mouse.x > VW - band) ex = (mouse.x - (VW - band)) / band;
+      if (mouse.y < band) ey = -(band - mouse.y) / band; else if (mouse.y > VH - band) ey = (mouse.y - (VH - band)) / band;
+      if (ex || ey) { cam.lock = false; var sp = edgeV * 8 * raw / cam.z; cam.x += ex * sp; cam.y += ey * sp; }
     }
     // keep the view on the painted sandbox: never show past its edges (centred when the view is wider than the map)
     var hw = VW / 2 / cam.z, hh = VH / 2 / cam.z;

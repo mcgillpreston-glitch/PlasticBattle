@@ -132,13 +132,14 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
 
   // Let the armies meet
   const t0 = Date.now(), b0 = A.bytes, f0 = A.frames;
-  await sleep(14000);
+  // Sample across the whole window: a single snapshot can land after the damaged minions have already died.
+  let seenHurt = 0, seenRounds = 0;
+  for (let i = 0; i < 28; i++) { await sleep(500); const s1 = await st(A), s2 = await st(B); seenHurt += (s1.hurtMinions || 0) + (s2.hurtMinions || 0); seenRounds += (s1.rounds || 0) + (s2.rounds || 0); a = s1; b = s2; }
   const secs = (Date.now() - t0) / 1000;
-  a = await st(A); b = await st(B);
   check('snapshots keep flowing (~20 per second)', A.frames - f0 > secs * 15, { perSec: Math.round((A.frames - f0) / secs) });
   check('bandwidth per player stays modest', (A.bytes - b0) / secs < 60000, { bytesPerSec: Math.round((A.bytes - b0) / secs) });
   check('clients agree on match time', Math.abs(a.time - b.time) < 0.5, { a: a.time, b: b.time });
-  check('combat is happening (damaged reserves seen)', a.hurtMinions + b.hurtMinions > 0 || a.rounds + b.rounds > 0, { hurtA: a.hurtMinions, hurtB: b.hurtMinions });
+  check('combat is happening (damaged reserves or shots seen during the window)', seenHurt > 0 || seenRounds > 0, { hurtSeen: seenHurt, roundsSeen: seenRounds });
   await A.screenshot({ path: out + '-match.png' });
 
   await A.keyboard.down('Tab'); await sleep(1300);

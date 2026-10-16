@@ -167,8 +167,22 @@ function drawOverlays(shx, shy) {
     var hh = unitH(u);
     if (u.kind === 'hero') {
       bar(u.x, u.y - hh - 16, 84, 8, u.hp / maxHp(u), u.team, null, u.shield / maxHp(u), u.lvl);
-      ctx.font = '400 11px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = u.team === MYTEAM ? '#CFF5D3' : '#FFD6D2'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-      var nm = u.isPlayer ? 'YOU' : (u.pname ? u.pname.toUpperCase() : u.name.toUpperCase()); ctx.strokeText(nm, u.x, u.y - hh - 23); ctx.fillText(nm, u.x, u.y - hh - 23);
+      var human = !u.bot, tc = u.team === MYTEAM ? '110,200,120' : '235,90,70';
+      if (human && !u.isPlayer) {
+        ctx.setLineDash([]); ctx.fillStyle = 'rgba(' + tc + ',0.28)'; ell(ctx, u.x, u.y + 2, 46, 18); ctx.fill();
+        ctx.strokeStyle = 'rgba(' + tc + ',0.98)'; ctx.lineWidth = 5; ell(ctx, u.x, u.y + 2, 46, 18); ctx.stroke();
+      }
+      var nm = u.isPlayer ? 'YOU' : (u.pname ? u.pname.toUpperCase() : u.name.toUpperCase());
+      if (human) {
+        ctx.font = '400 13px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        var tw = ctx.measureText(nm).width + 16, ly = u.y - hh - 27;
+        ctx.fillStyle = 'rgba(' + tc + ',0.95)'; rrect(ctx, u.x - tw / 2, ly - 10, tw, 20, 6); ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; rrect(ctx, u.x - tw / 2, ly - 10, tw, 20, 6); ctx.stroke();
+        ctx.fillStyle = '#FFFFFF'; ctx.fillText(nm, u.x, ly + 1); ctx.textBaseline = 'alphabetic';
+      } else {
+        ctx.font = '400 11px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = u.team === MYTEAM ? '#CFF5D3' : '#FFD6D2'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+        ctx.strokeText(nm, u.x, u.y - hh - 23); ctx.fillText(nm, u.x, u.y - hh - 23);
+      }
     } else bar(u.x, u.y - hh - 10, 40, 4, u.hp / u.maxHp, u.team);
   });
   if (G.player && !G.player.dead) {
@@ -178,6 +192,24 @@ function drawOverlays(shx, shy) {
   G.fx.forEach(function (f) { if (f.k === 'callout') drawFx(f); });
   G.texts.forEach(function (t) { var pop = t.t < 0.1 ? 1.5 - t.t * 5 : 1; ctx.save(); ctx.translate(t.x, t.y); ctx.scale(pop, pop); ctx.globalAlpha = t.t < 0.6 ? 1 : 1 - (t.t - 0.6) / 0.3; ctx.font = '400 ' + (t.big ? 24 : 17) + 'px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(t.txt, 0, 0); ctx.fillStyle = t.color; ctx.fillText(t.txt, 0, 0); ctx.restore(); ctx.globalAlpha = 1; });
   ctx.restore();
+  drawEdgeMarkers();
+}
+/* Arrows pinned to the screen edge that point at human heroes currently outside the view. */
+function drawEdgeMarkers() {
+  if (!G || !G.units) return;
+  var pad = 36, cx = viewCX(), cy = VH / 2;
+  G.units.forEach(function (u) {
+    if (u.kind !== 'hero' || u.dead || u.bot || u.isPlayer || !visibleTo(u, MYTEAM)) return;
+    var p = w2s(u.x, u.y);
+    if (p.x >= pad && p.x <= VW - pad && p.y >= pad && p.y <= VH - pad) return;
+    var dx = p.x - cx, dy = p.y - cy;
+    var k = Math.min((cx - pad) / Math.max(1, Math.abs(dx)), (cy - pad) / Math.max(1, Math.abs(dy)));
+    var col = u.team === MYTEAM ? '110,200,120' : '235,90,70';
+    ctx.save(); ctx.translate(cx + dx * k, cy + dy * k); ctx.rotate(Math.atan2(dy, dx));
+    ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-10, -13); ctx.lineTo(-10, 13); ctx.closePath();
+    ctx.fillStyle = 'rgba(' + col + ',0.98)'; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 3; ctx.fill(); ctx.stroke();
+    ctx.restore();
+  });
 }
 /* Thermal feed while reinforcing: the scene is downsampled, heat is painted onto bodies, shots and blasts, and every pixel is mapped through an ironbow palette (cold blue to white-hot). */
 var THERM = { cv: null, x: null, lut: null, scan: null, seed: 1 };
@@ -577,7 +609,7 @@ function drawMini() {
   BRUSH.forEach(function (b) { mctx.fillStyle = 'rgba(120,230,90,0.35)'; ell(mctx, b.x, b.y, b.rx, b.ry); mctx.fill(); });
   G.structs.forEach(function (s) { mctx.fillStyle = s.dead ? '#3A3A30' : s.team === MYTEAM ? '#5BD66B' : '#F0453A'; var z = s.kind === 'hq' ? 76 : 50; mctx.fillRect(s.x - z / 2, s.y - z / 2, z, z); });
   if (G.barrage) G.barrage.beams.forEach(function (b) { if (b.x == null) return; mctx.strokeStyle = '#7EC8FF'; mctx.lineWidth = 10; mctx.beginPath(); mctx.arc(b.x, b.y, G.barrage.r, 0, Math.PI * 2); mctx.stroke(); });
-  G.units.forEach(function (u) { if (u.dead || !visibleTo(u, MYTEAM)) return; mctx.fillStyle = u.isPlayer ? '#FFFFFF' : u.team === MYTEAM ? '#5BD66B' : '#F0453A'; var z = u.kind === 'hero' ? 46 : 22; mctx.beginPath(); mctx.arc(u.x, u.y, z / 2, 0, Math.PI * 2); mctx.fill(); });
+  G.units.forEach(function (u) { if (u.dead || !visibleTo(u, MYTEAM)) return; mctx.fillStyle = u.isPlayer ? '#FFFFFF' : u.team === MYTEAM ? '#5BD66B' : '#F0453A'; var hum = u.kind === 'hero' && !u.bot, z = u.kind === 'hero' ? (hum ? 66 : 46) : 22; mctx.beginPath(); mctx.arc(u.x, u.y, z / 2, 0, Math.PI * 2); mctx.fill(); if (hum) { mctx.strokeStyle = '#FFFFFF'; mctx.lineWidth = 7; mctx.stroke(); } });
   mctx.strokeStyle = 'rgba(255,255,255,0.85)'; mctx.lineWidth = 8; mctx.strokeRect(cam.x - (VW - SIDE_W) / 2 / cam.z, cam.y - VH / 2 / cam.z, (VW - SIDE_W) / cam.z, VH / cam.z);
   mctx.restore();
   mctx.strokeStyle = 'rgba(80,200,90,0.18)'; mctx.lineWidth = 1;

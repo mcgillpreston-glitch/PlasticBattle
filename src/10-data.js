@@ -89,6 +89,12 @@ var HEROES = [
   R:{n:'Night Raid',t:'buff',cd:45,dur:4,b:{ms:.4,dmgMul:.4,ghost:1}}}
 ];
 /* Tuning pass: ability cooldowns are 30% shorter and the gap between basic shots 20% shorter (the hero table above keeps the design numbers). */
+/* Match length in seconds. At the buzzer the fort with more structure HP left wins; level HP is a draw. */
+/* Turret pressure: each enemy turret a team has destroyed on a lane adds `perTurret` rifle to that team's waves on that lane, up to `max`. */
+var RAMP = { perTurret: 1, max: 3 };
+/* Minions keep advancing along their lane while they fire, instead of stopping at first contact. */
+var WALK_SHOOT = true;
+var MATCH_LEN = 10 * 60;
 var TUNE = { cdMul: 0.7, acdMul: 0.8 };
 HEROES.forEach(function (h) {
   h.acd = Math.round(h.acd * TUNE.acdMul * 100) / 100;
