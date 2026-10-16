@@ -357,7 +357,7 @@ function applyMe(me) {
 function netScore(m) {
   m.h.forEach(function (a) {
     var u = NET.byId && NET.byId[a[0]]; if (!u) return;
-    u.lvl = a[1]; u.st = { k: a[2], d: a[3], a: a[4], cs: a[5], dmgH: a[6], dmgS: a[7], taken: a[8], heal: a[9], best: a[10] };
+    u.lvl = a[1]; u.st = { k: a[2], d: a[3], a: a[4], cs: a[5], dmgH: a[6], dmgS: a[7], taken: a[8], heal: a[9], best: a[10], cash: a[14] };
     if (!u.isPlayer) { u.augs = []; for (var i = 0; i < a[11]; i++) u.augs.push(''); }
     if (u._hidden) { u.dead = !!a[12]; u.respawn = a[13] / 10; }
   });

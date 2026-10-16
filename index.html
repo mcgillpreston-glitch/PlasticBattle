@@ -1304,6 +1304,8 @@ function withdrawCash(u, sid) { var i = G.stash.findIndex(function (e) { return 
 /* Buy one item from the shop. Only at the team's HQ, only with enough cash, one of each item, up to SHOP_SLOTS. */
 function buyItem(u, id) { var it = SHOP_ITEMS.find(function (x) { return x.id === id; }); if (!it || u.dead || !atHq(u) || u.cash < it.price || u.items.indexOf(id) >= 0 || u.items.length >= SHOP_SLOTS) return false; u.cash -= it.price; u.items.push(id); Object.keys(it.mods).forEach(function (k) { u.aug[k] = (u.aug[k] || 0) + it.mods[k]; }); return true; }
 /* At the buzzer, cash in hand and stashed cash count at face value into each hero's stats. */
+/* Cash a hero is worth right now: cash in hand plus anything stashed at the HQ, at face value. */
+function cashValue(u) { var s = u.cash || 0; G.stash.forEach(function (e) { if (e.owner === u.id) s += e.amt; }); return s; }
 function tallyCash() { G.units.forEach(function (u) { if (u.kind !== 'hero') return; var st = 0; G.stash.forEach(function (e) { if (e.owner === u.id) st += e.amt; }); u.st.cash = u.cash + st; }); }
 function kill(src, tgt) {
   if (tgt.dead) return;
@@ -3218,7 +3220,8 @@ function openSB(mode) { if (!G) return; sbMode = mode; sbEl.hidden = false; rend
 function closeSB() { sbEl.hidden = true; sbMode = null; }
 function renderSB() {
   var heroes = G.units.filter(function (u) { return u.kind === 'hero'; });
-  var cols = ['k', 'cs', 'dmgH', 'dmgS', 'taken', 'heal'], best = {};
+  heroes.forEach(function (h) { if (NET.mode !== 'online') h.st.cash = cashValue(h); });
+  var cols = ['k', 'cs', 'cash', 'dmgH', 'dmgS', 'taken', 'heal'], best = {};
   cols.forEach(function (c) { var m = 0; heroes.forEach(function (h) { m = Math.max(m, h.st[c]); }); best[c] = m; });
   var teams = [0, 1].map(function (team) {
     var hs = heroes.filter(function (h) { return h.team === team; });
@@ -3238,7 +3241,7 @@ function renderSB() {
       '<span>Kills <b>' + T.k + '</b></span><span>Deaths <b>' + T.d + '</b></span><span>Assists <b>' + T.a + '</b></span>' +
       '<span>Positions held <b>' + T.held + '/7</b></span><span>Positions taken <b>' + T.taken + '</b></span>' +
       '<span>Hero dmg <b>' + kfmt(T.dmgH) + '</b></span><span>Structure dmg <b>' + kfmt(T.dmgS) + '</b></span><span>CS <b>' + T.cs + '</b></span><span>Avg level <b>' + T.lvl.toFixed(1) + '</b></span><span>Orders <b>' + T.orders + '</b></span>' +
-      '</div></header><div class="sbwrap"><table class="sbt"><thead><tr><th scope="col">Soldier</th><th scope="col">Lvl</th><th scope="col">K / D / A</th><th scope="col">CS</th><th scope="col">Hero dmg</th><th scope="col">Struct dmg</th><th scope="col">Dmg taken</th><th scope="col">Heal/Shield</th><th scope="col">Best streak</th><th scope="col">Orders</th><th scope="col">Status</th></tr></thead><tbody>';
+      '</div></header><div class="sbwrap"><table class="sbt"><thead><tr><th scope="col">Soldier</th><th scope="col">Lvl</th><th scope="col">K / D / A</th><th scope="col">CS</th><th scope="col" title="Cash held plus anything stashed at the HQ">Cash</th><th scope="col">Hero dmg</th><th scope="col">Struct dmg</th><th scope="col">Dmg taken</th><th scope="col">Heal/Shield</th><th scope="col">Best streak</th><th scope="col">Orders</th><th scope="col">Status</th></tr></thead><tbody>';
     T.hs.forEach(function (h) {
       var b = function (c, v) { return '<td' + (best[c] > 0 && h.st[c] === best[c] ? ' class="best"' : '') + '>' + v + '</td>'; };
       var hpPct = Math.round(100 * clamp(h.hp / maxHp(h), 0, 1));
@@ -3246,7 +3249,7 @@ function renderSB() {
       html += '<tr class="' + (h.isPlayer ? 'me' : '') + (h.dead ? ' down' : '') + '"><td><span class="who"><img alt="" src="' + portrait(h.pose, h.team) + '"><span class="nm">' + h.name + '</span>' + (h.isPlayer ? '<span class="you">YOU</span>' : '') + '</span></td>' +
         '<td><span class="lv">' + h.lvl + '</span></td>' +
         '<td' + (best.k > 0 && h.st.k === best.k ? ' class="best"' : '') + '>' + h.st.k + ' / ' + h.st.d + ' / ' + h.st.a + '</td>' +
-        b('cs', h.st.cs) + b('dmgH', kfmt(h.st.dmgH)) + b('dmgS', kfmt(h.st.dmgS)) + b('taken', kfmt(h.st.taken)) + b('heal', kfmt(h.st.heal)) +
+        b('cs', h.st.cs) + b('cash', kfmt(h.st.cash)) + b('dmgH', kfmt(h.st.dmgH)) + b('dmgS', kfmt(h.st.dmgS)) + b('taken', kfmt(h.st.taken)) + b('heal', kfmt(h.st.heal)) +
         '<td>' + h.st.best + '</td><td title="' + h.augs.map(function (a) { return typeof a === 'string' ? a : a.n; }).join(', ') + '">' + h.augs.length + '</td><td>' + status + '</td></tr>';
     });
     html += '</tbody></table></div></section>';
@@ -3994,7 +3997,7 @@ function applyMe(me) {
 function netScore(m) {
   m.h.forEach(function (a) {
     var u = NET.byId && NET.byId[a[0]]; if (!u) return;
-    u.lvl = a[1]; u.st = { k: a[2], d: a[3], a: a[4], cs: a[5], dmgH: a[6], dmgS: a[7], taken: a[8], heal: a[9], best: a[10] };
+    u.lvl = a[1]; u.st = { k: a[2], d: a[3], a: a[4], cs: a[5], dmgH: a[6], dmgS: a[7], taken: a[8], heal: a[9], best: a[10], cash: a[14] };
     if (!u.isPlayer) { u.augs = []; for (var i = 0; i < a[11]; i++) u.augs.push(''); }
     if (u._hidden) { u.dead = !!a[12]; u.respawn = a[13] / 10; }
   });

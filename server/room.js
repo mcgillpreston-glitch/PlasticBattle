@@ -154,7 +154,7 @@ class Room {
         });
       }
       if (this.tickN % 20 === 0 || G.over) {
-        const sb = JSON.stringify({ t: 'sb', h: G.units.filter(u => u.kind === 'hero').map(u => [u.id, u.lvl, u.st.k, u.st.d, u.st.a, u.st.cs, Math.round(u.st.dmgH), Math.round(u.st.dmgS), Math.round(u.st.taken), Math.round(u.st.heal), u.st.best, u.augs.length, u.dead ? 1 : 0, Math.round(Math.max(0, u.respawn) * 10)]) });
+        const sb = JSON.stringify({ t: 'sb', h: G.units.filter(u => u.kind === 'hero').map(u => [u.id, u.lvl, u.st.k, u.st.d, u.st.a, u.st.cs, Math.round(u.st.dmgH), Math.round(u.st.dmgS), Math.round(u.st.taken), Math.round(u.st.heal), u.st.best, u.augs.length, u.dead ? 1 : 0, Math.round(Math.max(0, u.respawn) * 10), C.cashValue(u)]) });
         this.players.forEach(p => this.send(p, sb));
       }
       if (G.over && !this.overAt) {

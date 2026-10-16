@@ -162,6 +162,8 @@ function withdrawCash(u, sid) { var i = G.stash.findIndex(function (e) { return 
 /* Buy one item from the shop. Only at the team's HQ, only with enough cash, one of each item, up to SHOP_SLOTS. */
 function buyItem(u, id) { var it = SHOP_ITEMS.find(function (x) { return x.id === id; }); if (!it || u.dead || !atHq(u) || u.cash < it.price || u.items.indexOf(id) >= 0 || u.items.length >= SHOP_SLOTS) return false; u.cash -= it.price; u.items.push(id); Object.keys(it.mods).forEach(function (k) { u.aug[k] = (u.aug[k] || 0) + it.mods[k]; }); return true; }
 /* At the buzzer, cash in hand and stashed cash count at face value into each hero's stats. */
+/* Cash a hero is worth right now: cash in hand plus anything stashed at the HQ, at face value. */
+function cashValue(u) { var s = u.cash || 0; G.stash.forEach(function (e) { if (e.owner === u.id) s += e.amt; }); return s; }
 function tallyCash() { G.units.forEach(function (u) { if (u.kind !== 'hero') return; var st = 0; G.stash.forEach(function (e) { if (e.owner === u.id) st += e.amt; }); u.st.cash = u.cash + st; }); }
 function kill(src, tgt) {
   if (tgt.dead) return;

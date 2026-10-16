@@ -144,7 +144,8 @@ function openSB(mode) { if (!G) return; sbMode = mode; sbEl.hidden = false; rend
 function closeSB() { sbEl.hidden = true; sbMode = null; }
 function renderSB() {
   var heroes = G.units.filter(function (u) { return u.kind === 'hero'; });
-  var cols = ['k', 'cs', 'dmgH', 'dmgS', 'taken', 'heal'], best = {};
+  heroes.forEach(function (h) { if (NET.mode !== 'online') h.st.cash = cashValue(h); });
+  var cols = ['k', 'cs', 'cash', 'dmgH', 'dmgS', 'taken', 'heal'], best = {};
   cols.forEach(function (c) { var m = 0; heroes.forEach(function (h) { m = Math.max(m, h.st[c]); }); best[c] = m; });
   var teams = [0, 1].map(function (team) {
     var hs = heroes.filter(function (h) { return h.team === team; });
@@ -164,7 +165,7 @@ function renderSB() {
       '<span>Kills <b>' + T.k + '</b></span><span>Deaths <b>' + T.d + '</b></span><span>Assists <b>' + T.a + '</b></span>' +
       '<span>Positions held <b>' + T.held + '/7</b></span><span>Positions taken <b>' + T.taken + '</b></span>' +
       '<span>Hero dmg <b>' + kfmt(T.dmgH) + '</b></span><span>Structure dmg <b>' + kfmt(T.dmgS) + '</b></span><span>CS <b>' + T.cs + '</b></span><span>Avg level <b>' + T.lvl.toFixed(1) + '</b></span><span>Orders <b>' + T.orders + '</b></span>' +
-      '</div></header><div class="sbwrap"><table class="sbt"><thead><tr><th scope="col">Soldier</th><th scope="col">Lvl</th><th scope="col">K / D / A</th><th scope="col">CS</th><th scope="col">Hero dmg</th><th scope="col">Struct dmg</th><th scope="col">Dmg taken</th><th scope="col">Heal/Shield</th><th scope="col">Best streak</th><th scope="col">Orders</th><th scope="col">Status</th></tr></thead><tbody>';
+      '</div></header><div class="sbwrap"><table class="sbt"><thead><tr><th scope="col">Soldier</th><th scope="col">Lvl</th><th scope="col">K / D / A</th><th scope="col">CS</th><th scope="col" title="Cash held plus anything stashed at the HQ">Cash</th><th scope="col">Hero dmg</th><th scope="col">Struct dmg</th><th scope="col">Dmg taken</th><th scope="col">Heal/Shield</th><th scope="col">Best streak</th><th scope="col">Orders</th><th scope="col">Status</th></tr></thead><tbody>';
     T.hs.forEach(function (h) {
       var b = function (c, v) { return '<td' + (best[c] > 0 && h.st[c] === best[c] ? ' class="best"' : '') + '>' + v + '</td>'; };
       var hpPct = Math.round(100 * clamp(h.hp / maxHp(h), 0, 1));
@@ -172,7 +173,7 @@ function renderSB() {
       html += '<tr class="' + (h.isPlayer ? 'me' : '') + (h.dead ? ' down' : '') + '"><td><span class="who"><img alt="" src="' + portrait(h.pose, h.team) + '"><span class="nm">' + h.name + '</span>' + (h.isPlayer ? '<span class="you">YOU</span>' : '') + '</span></td>' +
         '<td><span class="lv">' + h.lvl + '</span></td>' +
         '<td' + (best.k > 0 && h.st.k === best.k ? ' class="best"' : '') + '>' + h.st.k + ' / ' + h.st.d + ' / ' + h.st.a + '</td>' +
-        b('cs', h.st.cs) + b('dmgH', kfmt(h.st.dmgH)) + b('dmgS', kfmt(h.st.dmgS)) + b('taken', kfmt(h.st.taken)) + b('heal', kfmt(h.st.heal)) +
+        b('cs', h.st.cs) + b('cash', kfmt(h.st.cash)) + b('dmgH', kfmt(h.st.dmgH)) + b('dmgS', kfmt(h.st.dmgS)) + b('taken', kfmt(h.st.taken)) + b('heal', kfmt(h.st.heal)) +
         '<td>' + h.st.best + '</td><td title="' + h.augs.map(function (a) { return typeof a === 'string' ? a : a.n; }).join(', ') + '">' + h.augs.length + '</td><td>' + status + '</td></tr>';
     });
     html += '</tbody></table></div></section>';
