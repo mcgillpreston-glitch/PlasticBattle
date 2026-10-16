@@ -90,8 +90,8 @@ var HEROES = [
 ];
 /* Tuning pass: ability cooldowns are 30% shorter and the gap between basic shots 20% shorter (the hero table above keeps the design numbers). */
 /* Match length in seconds. At the buzzer the fort with more structure HP left wins; level HP is a draw. */
-/* Mid-game wave ramp: from wave `from`, every `every` waves each lane gets one more rifle per side, up to `max` extra. */
-var RAMP = { from: 8, every: 4, max: 3 };
+/* Turret pressure: each enemy turret a team has destroyed on a lane adds `perTurret` rifle to that team's waves on that lane, up to `max`. */
+var RAMP = { perTurret: 1, max: 3 };
 /* Minions keep advancing along their lane while they fire, instead of stopping at first contact. */
 var WALK_SHOOT = true;
 var MATCH_LEN = 10 * 60;
