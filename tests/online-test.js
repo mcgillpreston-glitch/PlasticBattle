@@ -57,6 +57,35 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
   check('match started for both with opposite teams', a.me && b.me && a.me.team === 0 && b.me.team === 1 && a.draftHidden && b.draftHidden, { a: a.me, b: b.me });
   check('3v3 roster: 6 heroes known to each client', a.units >= 6 && b.units >= 6, { a: a.units, b: b.units });
 
+  // ---- client-side prediction: own hero moves on the click, before the server answers ----
+  await A.evaluate(() => { const p = window.__PF.G.player; window.__c0 = { x: p.x, y: p.y }; window.__PF.cmdMove({ x: p.x + 200, y: p.y - 60 }, false); });
+  const quick = await A.evaluate(() => { const p = window.__PF.G.player; return Math.hypot(p.x - window.__c0.x, p.y - window.__c0.y); });
+  check('PRED: own unit starts moving on the click, before the server answers', quick > 2, { movedInMs: Math.round(quick * 10) / 10 });
+  await sleep(2500);
+  const pd = await A.evaluate(() => window.__PF.predDebug());
+  const gap = pd.pred && pd.server ? Math.hypot(pd.pred.x - pd.server.x, pd.pred.y - pd.server.y) : -1;
+  check('PRED: prediction stays within latency of the server while moving', pd.on && gap >= 0 && gap < 45, { gap: Math.round(gap), on: pd.on });
+  await A.keyboard.press('s'); await sleep(700);
+  const h1 = await A.evaluate(() => window.__PF.predDebug());
+  await sleep(500);
+  const h2 = await A.evaluate(() => window.__PF.predDebug());
+  const still = h1.pred && h2.pred ? Math.hypot(h2.pred.x - h1.pred.x, h2.pred.y - h1.pred.y) : -1;
+  check('PRED: halt stops the predicted unit', still >= 0 && still < 3, { still: Math.round(still * 10) / 10 });
+
+  // ---- attack prediction: the chase starts on the click; the gap to the server is bounded for a moving target ----
+  const enemy = await A.evaluate(() => { const G = window.__PF.G, me = G.player; const e = G.units.filter(u => u.kind === 'hero' && u.team !== me.team && !u.dead && !u._hidden).sort((a, b) => Math.hypot(a.x - me.x, a.y - me.y) - Math.hypot(b.x - me.x, b.y - me.y))[0]; return e ? { id: e.id } : null; });
+  if (enemy) {
+    const d0 = await A.evaluate(id => { const G = window.__PF.G, me = G.player, e = G.units.find(u => u.id === id); return Math.hypot(e.x - me.x, e.y - me.y); }, enemy.id);
+    await A.evaluate(id => { window.__PF.cmdTarget(window.__PF.G.units.find(u => u.id === id)); }, enemy.id);
+    await sleep(150);
+    const q = await A.evaluate(id => { const G = window.__PF.G, me = G.player, e = G.units.find(u => u.id === id); return { d: Math.hypot(e.x - me.x, e.y - me.y), winding: !!me.wind }; }, enemy.id);
+    check('ATTACK: own unit starts chasing the target on the click, before the server answers', q.d < d0 - 2 || q.winding, { d0: Math.round(d0), d150: Math.round(q.d), winding: q.winding });
+    await sleep(2500);
+    const pa = await A.evaluate(() => window.__PF.predDebug());
+    const gapA = pa.pred && pa.server ? Math.hypot(pa.pred.x - pa.server.x, pa.pred.y - pa.server.y) : -1;
+    check('ATTACK: prediction stays close to the server while chasing a moving target', gapA >= 0 && gapA < 90, { gap: Math.round(gapA) });
+  } else check('ATTACK: an enemy hero is in sight for the test', false);
+
   // Move both players toward mid by clicking the ground ahead of them
   const startA = a.me;
   await A.mouse.move(1000, 250); await A.mouse.click(1000, 250);

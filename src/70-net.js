@@ -1,7 +1,7 @@
 /* Browser only: online PvP. The server runs the match; this client sends commands and draws server snapshots. */
 var PF_DEFAULT_SERVER = 'wss://plastic-front.prestonmcgill.workers.dev/ws';   // the deployed game server on Cloudflare (see README); players can override it under Server
 /* Interpolation delay behind the newest snapshot: 60 ms on a steady connection, growing with measured arrival jitter up to 160 ms. */
-function interpDelay() { return clamp(0.06 + 2.5 * (NETC.jit == null ? 0.016 : NETC.jit), 0.06, 0.16); }
+function interpDelay() { return clamp(0.045 + 2.5 * (NETC.jit == null ? 0.016 : NETC.jit), 0.045, 0.14); }
 var NETC = { ws: null, code: null, leaving: false, lastErr: null, cid: null, room: null, snaps: [], cur: null, off: null, myUid: 0, aimT: 0, pingT: 0, ping: 0, inMatch: false, offerKey: '' };
 var KIND = ['hero', 'melee', 'rifle', 'tank', 'jeep', 'mortar'];
 var PKIND = ['shot', 'bullet', 'rocket', 'jack'];
@@ -121,16 +121,99 @@ function netSnap(S) {
   S.pp = {}; (S.p || []).forEach(function (a) { S.pp[a[0]] = a; });
   NETC.snaps.push(S);
 }
+/* Client-side prediction for your own hero's ground moves. A click starts the unit moving at once, using the same pathing as the server.
+   Each snapshot carries the server's position at the moment it applied your latest move (server time). We compare that with our own
+   prediction at the same moment and fold the difference in gradually (corr decays), so corrections never show as a snap. */
+var PRED = { on: false, u: null, move: null, stop: 4, target: null, wind: null, cd: 0, hist: [], corr: { x: 0, y: 0 }, ackS: 0 };
+function predStart() {
+  var p = G.player; if (!p || p.dead) return false;
+  if (!PRED.on || !PRED.u) { PRED.on = true; PRED.u = { x: p.x, y: p.y, r: p.r, path: null, pathGoal: null, pathVer: -1, pathCd: 0, repath: false, scAt: null, facing: p.facing }; PRED.corr = { x: 0, y: 0 }; PRED.hist = []; }
+  return true;
+}
+function predOff() { PRED.on = false; PRED.u = null; PRED.move = null; PRED.target = null; PRED.wind = null; PRED.hist = []; PRED.corr = { x: 0, y: 0 }; }
+function predMove(pt) { if (predStart()) { PRED.target = null; PRED.wind = null; PRED.stop = 4; PRED.move = freePoint({ x: pt.x, y: pt.y }, G.player.r); } }
+function predHalt() { PRED.move = null; PRED.target = null; PRED.wind = null; }
+/* attack order: chase the target's last known position and wind up locally once in range; the server confirms the shot */
+function predAttack(t) { if (predStart()) { PRED.target = t; PRED.move = null; PRED.wind = null; } }
+function predHistAt(c) {
+  var h = PRED.hist; if (!h.length || c < h[0].t) return null;
+  for (var i = h.length - 1; i > 0; i--) if (h[i - 1].t <= c) { var a = h[i - 1], b = h[i], f = b.t > a.t ? (c - a.t) / (b.t - a.t) : 0; return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }; }
+  return h[0];
+}
+/* local wind-up and firing visuals for a predicted attack; set after the snapshots so the server's wind does not overwrite them */
+function predVisual(raw) {
+  var p = G.player; if (!p || !PRED.on) return;
+  if (PRED.cd > 0) PRED.cd -= raw;
+  var tg = PRED.target;
+  if (!tg || p.dead) { PRED.wind = null; return; }
+  var rng = aaRange(p) + (tg.r || 0) + p.r * 0.5;
+  if (vlen(tg.x - PRED.u.x, tg.y - PRED.u.y) > rng) { PRED.wind = null; return; }
+  if (!PRED.wind && PRED.cd <= 0) PRED.wind = { t: 0, dur: windTime(p) };
+  if (PRED.wind) {
+    PRED.wind.t += raw;
+    if (!p.wind || p.wind.tgt !== tg) p.wind = { tgt: tg, t: 0, dur: PRED.wind.dur };
+    p.wind.t = PRED.wind.t;
+    if (PRED.wind.t >= PRED.wind.dur) { PRED.wind = null; p.wind = null; PRED.cd = aaCd(p); p.fireT = 0.14; p.recoilT = 0.12; }
+  }
+}
+function predReconcile(a, tm) {
+  if (!PRED.on || !PRED.u) return;
+  var p = G.player;
+  if (p.dead) { predOff(); return; }
+  // 1. the server's position at the moment it applied our latest ground order, against our prediction at that same moment
+  var ackMs = a[21] || 0;
+  if (ackMs && ackMs / 1000 > PRED.ackS) {
+    PRED.ackS = ackMs / 1000;
+    var h = predHistAt(PRED.ackS - NETC.off);
+    if (h) {
+      var ex = a[22] - h.x, ey = a[23] - h.y;
+      PRED.u.x += ex; PRED.u.y += ey;
+      if (Math.hypot(ex, ey) <= 120) { PRED.corr.x -= ex; PRED.corr.y -= ey; } else { PRED.corr = { x: 0, y: 0 }; }
+    }
+  }
+  // 2. the server's position right now, against our prediction from the time the snapshot describes (a rough check for pushes and knockbacks)
+  var hs = predHistAt(tm - NETC.off);
+  if (hs && Math.hypot(a[3] - hs.x, a[4] - hs.y) > 150) { PRED.u.x = a[3]; PRED.u.y = a[4]; PRED.corr = { x: 0, y: 0 }; PRED.move = null; }
+}
+function predStep(raw) {
+  var p = G.player; if (!p || !PRED.on || !PRED.u) return;
+  var u = PRED.u;
+  if (u.pathCd > 0) u.pathCd -= raw;
+  var tg = PRED.target;
+  if (tg && (tg.dead || tg._hidden)) { PRED.target = tg = null; PRED.wind = null; }
+  if (tg) {
+    var rng = aaRange(p) + (tg.r || 0) + u.r * 0.5;
+    if (vlen(tg.x - u.x, tg.y - u.y) <= rng) { PRED.move = null; u.path = null; }
+    else { PRED.move = { x: tg.x, y: tg.y }; PRED.stop = rng * 0.9; }
+  }
+  if (PRED.move) {
+    var spd = moveSpeed(p);
+    if (spd > 0 && stepToward(u, PRED.move.x, PRED.move.y, spd * raw, PRED.stop)) PRED.move = null;
+  }
+  if (tg && Math.abs(tg.x - u.x) > 4) p.facing = tg.x < u.x ? -1 : 1;
+  var now = performance.now() / 1000;
+  PRED.hist.push({ t: now, x: u.x, y: u.y });
+  while (PRED.hist.length > 2 && PRED.hist[0].t < now - 2) PRED.hist.shift();
+  var k = Math.exp(-raw * 12); PRED.corr.x *= k; PRED.corr.y *= k;
+  p.x = u.x + PRED.corr.x; p.y = u.y + PRED.corr.y;
+}
+/* test hook: the prediction state next to the server's latest position for our hero */
+function predDebug() {
+  var cur = NETC.cur, me = G && G.player, sv = cur && me && cur.pu[me.id];
+  return { on: PRED.on, pred: PRED.u ? { x: PRED.u.x, y: PRED.u.y } : null, corr: { x: PRED.corr.x, y: PRED.corr.y }, server: sv ? { x: sv[3], y: sv[4] } : null, winding: !!(me && me.wind), target: PRED.target ? PRED.target.id : 0 };
+}
 function netFrame(raw) {
   NETC.pingT -= raw; if (NETC.pingT <= 0 && NETC.ws) { NETC.pingT = 2; netSend({ t: 'ping', c: performance.now() }); }
   if (!G || !NETC.inMatch) return;
   var rt = performance.now() / 1000 + (NETC.off || 0) - interpDelay();
+  predStep(raw);
   while (NETC.snaps.length > 8) { NETC.cur = NETC.snaps.shift(); applySnap(NETC.cur); }
   while (NETC.snaps.length && NETC.snaps[0].tm <= rt) { NETC.cur = NETC.snaps.shift(); applySnap(NETC.cur); }
   var A = NETC.cur, B = NETC.snaps[0]; if (!A) return;
   var al = B ? clamp((rt - A.tm) / Math.max(0.001, B.tm - A.tm), 0, 1) : 0, since = Math.max(0, rt - A.tm);
   G.units.forEach(function (u) {
     if (u._hidden) return;
+    if (u === G.player && PRED.on) return;
     var a = A.pu[u.id]; if (!a) return; var b = B && B.pu[u.id];
     if (b && !u.dead && vlen(b[3] - a[3], b[4] - a[4]) < 400) { u.x = a[3] + (b[3] - a[3]) * al; u.y = a[4] + (b[4] - a[4]) * al; } else { u.x = a[3]; u.y = a[4]; }
     if (u.dash && u.dash.leap) u.dash.t = Math.min(u.dash.dur, u.dash.t0 + since);
@@ -138,6 +221,7 @@ function netFrame(raw) {
   G.rounds.forEach(function (r) { var a = A.pr[r.id], b = B && B.pr[r.id]; if (a && b) { r.x = a[1] + (b[1] - a[1]) * al; r.y = a[2] + (b[2] - a[2]) * al; } });
   G.proj.forEach(function (p) { var a = A.pp[p.id], b = B && B.pp[p.id]; if (a && b) { p.x = a[1] + (b[1] - a[1]) * al; p.y = a[2] + (b[2] - a[2]) * al; } else if (a) { p.x = a[1] + p.vx * since; p.y = a[2] + p.vy * since; } });
   G.lobs.forEach(function (l) { l.t = Math.min(l.delay, l.t0 + since); });
+  predVisual(raw);
   NETC.aimT -= raw;
   if (G.player && G.player.chan && mouse.inside && NETC.aimT <= 0) { NETC.aimT = 0.1; netSend({ t: 'aim', x: Math.round(mouse.wx), y: Math.round(mouse.wy) }); }
 }
@@ -172,6 +256,7 @@ function applySnap(S) {
     if (u.kind === 'hero') { if (u.team !== MYTEAM) u._hidden = true; return true; }
     delete NET.byId[u.id]; return false;
   });
+  if (G.player && S.pu[G.player.id]) predReconcile(S.pu[G.player.id], S.tm);
   var blk = false;
   S.s.forEach(function (a) { var s = NET.byId[a[0]]; if (!s) return; s.hp = a[1]; var d = !!a[2]; if (d !== s.dead) { s.dead = d; blk = true; } s.respawn = a[3] / 10; });
   if (blk) rebuildBlockers();

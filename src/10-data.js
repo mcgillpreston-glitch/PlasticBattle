@@ -88,6 +88,12 @@ var HEROES = [
   E:{n:'Shadow Step',t:'dash',cd:9,dist:320},
   R:{n:'Night Raid',t:'buff',cd:45,dur:4,b:{ms:.4,dmgMul:.4,ghost:1}}}
 ];
+/* Tuning pass: ability cooldowns are 30% shorter and the gap between basic shots 20% shorter (the hero table above keeps the design numbers). */
+var TUNE = { cdMul: 0.7, acdMul: 0.8 };
+HEROES.forEach(function (h) {
+  h.acd = Math.round(h.acd * TUNE.acdMul * 100) / 100;
+  ['Q', 'W', 'E', 'R'].forEach(function (k) { if (h[k] && h[k].cd) h[k].cd = Math.round(h[k].cd * TUNE.cdMul * 10) / 10; });
+});
 var TAG = { n:'Tag Round', t:'jack', cd:20, range:1200, speed:1300, w:22 };
 var DECK = { n:'Hit the Deck', t:'dash', cd:18, dist:210, iframe:.35 };
 

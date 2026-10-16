@@ -628,6 +628,12 @@ var HEROES = [
   E:{n:'Shadow Step',t:'dash',cd:9,dist:320},
   R:{n:'Night Raid',t:'buff',cd:45,dur:4,b:{ms:.4,dmgMul:.4,ghost:1}}}
 ];
+/* Tuning pass: ability cooldowns are 30% shorter and the gap between basic shots 20% shorter (the hero table above keeps the design numbers). */
+var TUNE = { cdMul: 0.7, acdMul: 0.8 };
+HEROES.forEach(function (h) {
+  h.acd = Math.round(h.acd * TUNE.acdMul * 100) / 100;
+  ['Q', 'W', 'E', 'R'].forEach(function (k) { if (h[k] && h[k].cd) h[k].cd = Math.round(h[k].cd * TUNE.cdMul * 10) / 10; });
+});
 var TAG = { n:'Tag Round', t:'jack', cd:20, range:1200, speed:1300, w:22 };
 var DECK = { n:'Hit the Deck', t:'dash', cd:18, dist:210, iframe:.35 };
 
@@ -1870,7 +1876,7 @@ function goalTaken(u) {
 function aaStyle(u) { return u.kind === 'hero' ? u.spec.aa : (u.type === 'melee' ? 'melee' : u.type === 'tank' ? 'tank' : u.type === 'mortar' ? 'shell' : 'bullet'); }
 function windTime(u) {
   var s = aaStyle(u);
-  if (u.kind === 'hero') return s === 'melee' ? 0.12 : s === 'shell' ? 0.22 : Math.min(0.16, aaCd(u) * 0.35);
+  if (u.kind === 'hero') return (s === 'melee' ? 0.12 : s === 'shell' ? 0.22 : Math.min(0.16, aaCd(u) * 0.35)) * 0.6;
   return s === 'tank' ? 0.32 : s === 'melee' ? 0.14 : 0.2;
 }
 function aimPoint(t) { return { x: t.x, y: t.isStruct ? t.y - 50 : t.y - unitH(t) * 0.45 }; }
@@ -2290,12 +2296,12 @@ function drawScene(shx, shy, zoomHint) {
       ctx.fillStyle = '#3F4A2A'; ctx.fillRect(-16, -6, 32, 12); ctx.fillStyle = '#596640'; ctx.beginPath(); ctx.moveTo(16, -6); ctx.lineTo(26, 0); ctx.lineTo(16, 6); ctx.closePath(); ctx.fill();
       ctx.restore();
     } else if (p.kind === 'jack') { streak(p.x, p.y, pa, 44, 4, '#E0703F', 'rgba(224,112,63,0)'); }
-    else { var big = p.kind === 'shot'; streak(p.x, p.y, pa, big ? 70 : 40, big ? 5 : 3, p.team === 0 ? '#F4FFD0' : '#FFE6B0', p.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)'); if (big) { ctx.fillStyle = '#FFFFFF'; ell(ctx, p.x, p.y, 4, 4); ctx.fill(); } }
+    else { var big = p.kind === 'shot'; streak(p.x, p.y, pa, big ? 96 : 66, big ? 7 : 5, p.team === 0 ? '#F4FFD0' : '#FFE6B0', p.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)'); ctx.fillStyle = '#FFFFFF'; ell(ctx, p.x, p.y, big ? 6 : 5, big ? 6 : 5); ctx.fill(); }
   });
   G.rounds.forEach(function (r) {
     var a = Math.atan2(r.ly - r.y, r.lx - r.x), heavy = r.heavy;
-    streak(r.x, r.y, a, heavy ? 56 : r.hero ? 46 : 30, heavy ? 5 : r.hero ? 3.5 : 2.2, heavy ? '#FFD08A' : r.team === 0 ? '#F4FFD0' : '#FFE6B0', heavy ? 'rgba(255,150,60,0)' : r.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)');
-    if (heavy || r.hero) { ctx.fillStyle = '#FFFFFF'; ell(ctx, r.x, r.y, heavy ? 4 : 2.5, heavy ? 4 : 2.5); ctx.fill(); }
+    streak(r.x, r.y, a, heavy ? 80 : r.hero ? 72 : 52, heavy ? 7 : r.hero ? 5.5 : 4, heavy ? '#FFD08A' : r.team === 0 ? '#F4FFD0' : '#FFE6B0', heavy ? 'rgba(255,150,60,0)' : r.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)');
+    ctx.fillStyle = '#FFFFFF'; ell(ctx, r.x, r.y, heavy ? 5 : r.hero ? 4 : 3, heavy ? 5 : r.hero ? 4 : 3); ctx.fill();
   });
   G.lobs.forEach(function (l) {
     var p = Math.min(1, l.t / l.delay), gx = l.sx + (l.x - l.sx) * p, gy = (l.sy + 50) + (l.y - l.sy - 50) * p, x = l.sx + (l.x - l.sx) * p, y = l.sy + (l.y - l.sy) * p - Math.sin(p * Math.PI) * 220;
@@ -3163,19 +3169,19 @@ function pickAt(w) {
 }
 /* Player commands: applied directly offline, sent to the server online. */
 function cmdMove(pt, amove) {
-  if (NET.mode === 'online') { netSend({ t: 'move', x: Math.round(pt.x), y: Math.round(pt.y), a: amove ? 1 : 0 }); G.player.target = null; return; }
+  if (NET.mode === 'online') { netSend({ t: 'move', x: Math.round(pt.x), y: Math.round(pt.y), a: amove ? 1 : 0 }); G.player.target = null; predMove(pt); return; }
   var u = G.player; u.target = null; u.move = pt; u.amove = amove ? pt : null;
 }
 function cmdTarget(t) {
-  if (NET.mode === 'online') { netSend({ t: 'atk', id: t.id }); G.player.target = t; return; }
+  if (NET.mode === 'online') { netSend({ t: 'atk', id: t.id }); G.player.target = t; predAttack(t); return; }
   var u = G.player; u.target = t; u.move = null; u.amove = null;
 }
 function cmdCast(slot, w) {
-  if (NET.mode === 'online') { netSend({ t: 'cast', s: slot, x: Math.round(w.x), y: Math.round(w.y) }); return; }
+  if (NET.mode === 'online') { netSend({ t: 'cast', s: slot, x: Math.round(w.x), y: Math.round(w.y) }); predOff(); return; }
   cast(G.player, slot, w);
 }
 function cmdHalt() {
-  if (NET.mode === 'online') { netSend({ t: 'halt' }); G.player.target = null; return; }
+  if (NET.mode === 'online') { netSend({ t: 'halt' }); G.player.target = null; predHalt(); return; }
   var u = G.player; u.move = null; u.target = null; u.amove = null;
 }
 function order(sx, sy) {
@@ -3448,13 +3454,13 @@ function start() {
 }
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(start, start); else start();
 
-window.__PF = { get G() { return G; }, get NET() { return NET; }, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };
+window.__PF = { get G() { return G; }, get NET() { return NET; }, predDebug: predDebug, cmdTarget: cmdTarget, cmdMove: cmdMove, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };
 
 /* ===== 70-net.js ===== */
 /* Browser only: online PvP. The server runs the match; this client sends commands and draws server snapshots. */
 var PF_DEFAULT_SERVER = 'wss://plastic-front.prestonmcgill.workers.dev/ws';   // the deployed game server on Cloudflare (see README); players can override it under Server
 /* Interpolation delay behind the newest snapshot: 60 ms on a steady connection, growing with measured arrival jitter up to 160 ms. */
-function interpDelay() { return clamp(0.06 + 2.5 * (NETC.jit == null ? 0.016 : NETC.jit), 0.06, 0.16); }
+function interpDelay() { return clamp(0.045 + 2.5 * (NETC.jit == null ? 0.016 : NETC.jit), 0.045, 0.14); }
 var NETC = { ws: null, code: null, leaving: false, lastErr: null, cid: null, room: null, snaps: [], cur: null, off: null, myUid: 0, aimT: 0, pingT: 0, ping: 0, inMatch: false, offerKey: '' };
 var KIND = ['hero', 'melee', 'rifle', 'tank', 'jeep', 'mortar'];
 var PKIND = ['shot', 'bullet', 'rocket', 'jack'];
@@ -3574,16 +3580,99 @@ function netSnap(S) {
   S.pp = {}; (S.p || []).forEach(function (a) { S.pp[a[0]] = a; });
   NETC.snaps.push(S);
 }
+/* Client-side prediction for your own hero's ground moves. A click starts the unit moving at once, using the same pathing as the server.
+   Each snapshot carries the server's position at the moment it applied your latest move (server time). We compare that with our own
+   prediction at the same moment and fold the difference in gradually (corr decays), so corrections never show as a snap. */
+var PRED = { on: false, u: null, move: null, stop: 4, target: null, wind: null, cd: 0, hist: [], corr: { x: 0, y: 0 }, ackS: 0 };
+function predStart() {
+  var p = G.player; if (!p || p.dead) return false;
+  if (!PRED.on || !PRED.u) { PRED.on = true; PRED.u = { x: p.x, y: p.y, r: p.r, path: null, pathGoal: null, pathVer: -1, pathCd: 0, repath: false, scAt: null, facing: p.facing }; PRED.corr = { x: 0, y: 0 }; PRED.hist = []; }
+  return true;
+}
+function predOff() { PRED.on = false; PRED.u = null; PRED.move = null; PRED.target = null; PRED.wind = null; PRED.hist = []; PRED.corr = { x: 0, y: 0 }; }
+function predMove(pt) { if (predStart()) { PRED.target = null; PRED.wind = null; PRED.stop = 4; PRED.move = freePoint({ x: pt.x, y: pt.y }, G.player.r); } }
+function predHalt() { PRED.move = null; PRED.target = null; PRED.wind = null; }
+/* attack order: chase the target's last known position and wind up locally once in range; the server confirms the shot */
+function predAttack(t) { if (predStart()) { PRED.target = t; PRED.move = null; PRED.wind = null; } }
+function predHistAt(c) {
+  var h = PRED.hist; if (!h.length || c < h[0].t) return null;
+  for (var i = h.length - 1; i > 0; i--) if (h[i - 1].t <= c) { var a = h[i - 1], b = h[i], f = b.t > a.t ? (c - a.t) / (b.t - a.t) : 0; return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }; }
+  return h[0];
+}
+/* local wind-up and firing visuals for a predicted attack; set after the snapshots so the server's wind does not overwrite them */
+function predVisual(raw) {
+  var p = G.player; if (!p || !PRED.on) return;
+  if (PRED.cd > 0) PRED.cd -= raw;
+  var tg = PRED.target;
+  if (!tg || p.dead) { PRED.wind = null; return; }
+  var rng = aaRange(p) + (tg.r || 0) + p.r * 0.5;
+  if (vlen(tg.x - PRED.u.x, tg.y - PRED.u.y) > rng) { PRED.wind = null; return; }
+  if (!PRED.wind && PRED.cd <= 0) PRED.wind = { t: 0, dur: windTime(p) };
+  if (PRED.wind) {
+    PRED.wind.t += raw;
+    if (!p.wind || p.wind.tgt !== tg) p.wind = { tgt: tg, t: 0, dur: PRED.wind.dur };
+    p.wind.t = PRED.wind.t;
+    if (PRED.wind.t >= PRED.wind.dur) { PRED.wind = null; p.wind = null; PRED.cd = aaCd(p); p.fireT = 0.14; p.recoilT = 0.12; }
+  }
+}
+function predReconcile(a, tm) {
+  if (!PRED.on || !PRED.u) return;
+  var p = G.player;
+  if (p.dead) { predOff(); return; }
+  // 1. the server's position at the moment it applied our latest ground order, against our prediction at that same moment
+  var ackMs = a[21] || 0;
+  if (ackMs && ackMs / 1000 > PRED.ackS) {
+    PRED.ackS = ackMs / 1000;
+    var h = predHistAt(PRED.ackS - NETC.off);
+    if (h) {
+      var ex = a[22] - h.x, ey = a[23] - h.y;
+      PRED.u.x += ex; PRED.u.y += ey;
+      if (Math.hypot(ex, ey) <= 120) { PRED.corr.x -= ex; PRED.corr.y -= ey; } else { PRED.corr = { x: 0, y: 0 }; }
+    }
+  }
+  // 2. the server's position right now, against our prediction from the time the snapshot describes (a rough check for pushes and knockbacks)
+  var hs = predHistAt(tm - NETC.off);
+  if (hs && Math.hypot(a[3] - hs.x, a[4] - hs.y) > 150) { PRED.u.x = a[3]; PRED.u.y = a[4]; PRED.corr = { x: 0, y: 0 }; PRED.move = null; }
+}
+function predStep(raw) {
+  var p = G.player; if (!p || !PRED.on || !PRED.u) return;
+  var u = PRED.u;
+  if (u.pathCd > 0) u.pathCd -= raw;
+  var tg = PRED.target;
+  if (tg && (tg.dead || tg._hidden)) { PRED.target = tg = null; PRED.wind = null; }
+  if (tg) {
+    var rng = aaRange(p) + (tg.r || 0) + u.r * 0.5;
+    if (vlen(tg.x - u.x, tg.y - u.y) <= rng) { PRED.move = null; u.path = null; }
+    else { PRED.move = { x: tg.x, y: tg.y }; PRED.stop = rng * 0.9; }
+  }
+  if (PRED.move) {
+    var spd = moveSpeed(p);
+    if (spd > 0 && stepToward(u, PRED.move.x, PRED.move.y, spd * raw, PRED.stop)) PRED.move = null;
+  }
+  if (tg && Math.abs(tg.x - u.x) > 4) p.facing = tg.x < u.x ? -1 : 1;
+  var now = performance.now() / 1000;
+  PRED.hist.push({ t: now, x: u.x, y: u.y });
+  while (PRED.hist.length > 2 && PRED.hist[0].t < now - 2) PRED.hist.shift();
+  var k = Math.exp(-raw * 12); PRED.corr.x *= k; PRED.corr.y *= k;
+  p.x = u.x + PRED.corr.x; p.y = u.y + PRED.corr.y;
+}
+/* test hook: the prediction state next to the server's latest position for our hero */
+function predDebug() {
+  var cur = NETC.cur, me = G && G.player, sv = cur && me && cur.pu[me.id];
+  return { on: PRED.on, pred: PRED.u ? { x: PRED.u.x, y: PRED.u.y } : null, corr: { x: PRED.corr.x, y: PRED.corr.y }, server: sv ? { x: sv[3], y: sv[4] } : null, winding: !!(me && me.wind), target: PRED.target ? PRED.target.id : 0 };
+}
 function netFrame(raw) {
   NETC.pingT -= raw; if (NETC.pingT <= 0 && NETC.ws) { NETC.pingT = 2; netSend({ t: 'ping', c: performance.now() }); }
   if (!G || !NETC.inMatch) return;
   var rt = performance.now() / 1000 + (NETC.off || 0) - interpDelay();
+  predStep(raw);
   while (NETC.snaps.length > 8) { NETC.cur = NETC.snaps.shift(); applySnap(NETC.cur); }
   while (NETC.snaps.length && NETC.snaps[0].tm <= rt) { NETC.cur = NETC.snaps.shift(); applySnap(NETC.cur); }
   var A = NETC.cur, B = NETC.snaps[0]; if (!A) return;
   var al = B ? clamp((rt - A.tm) / Math.max(0.001, B.tm - A.tm), 0, 1) : 0, since = Math.max(0, rt - A.tm);
   G.units.forEach(function (u) {
     if (u._hidden) return;
+    if (u === G.player && PRED.on) return;
     var a = A.pu[u.id]; if (!a) return; var b = B && B.pu[u.id];
     if (b && !u.dead && vlen(b[3] - a[3], b[4] - a[4]) < 400) { u.x = a[3] + (b[3] - a[3]) * al; u.y = a[4] + (b[4] - a[4]) * al; } else { u.x = a[3]; u.y = a[4]; }
     if (u.dash && u.dash.leap) u.dash.t = Math.min(u.dash.dur, u.dash.t0 + since);
@@ -3591,6 +3680,7 @@ function netFrame(raw) {
   G.rounds.forEach(function (r) { var a = A.pr[r.id], b = B && B.pr[r.id]; if (a && b) { r.x = a[1] + (b[1] - a[1]) * al; r.y = a[2] + (b[2] - a[2]) * al; } });
   G.proj.forEach(function (p) { var a = A.pp[p.id], b = B && B.pp[p.id]; if (a && b) { p.x = a[1] + (b[1] - a[1]) * al; p.y = a[2] + (b[2] - a[2]) * al; } else if (a) { p.x = a[1] + p.vx * since; p.y = a[2] + p.vy * since; } });
   G.lobs.forEach(function (l) { l.t = Math.min(l.delay, l.t0 + since); });
+  predVisual(raw);
   NETC.aimT -= raw;
   if (G.player && G.player.chan && mouse.inside && NETC.aimT <= 0) { NETC.aimT = 0.1; netSend({ t: 'aim', x: Math.round(mouse.wx), y: Math.round(mouse.wy) }); }
 }
@@ -3625,6 +3715,7 @@ function applySnap(S) {
     if (u.kind === 'hero') { if (u.team !== MYTEAM) u._hidden = true; return true; }
     delete NET.byId[u.id]; return false;
   });
+  if (G.player && S.pu[G.player.id]) predReconcile(S.pu[G.player.id], S.tm);
   var blk = false;
   S.s.forEach(function (a) { var s = NET.byId[a[0]]; if (!s) return; s.hp = a[1]; var d = !!a[2]; if (d !== s.dead) { s.dead = d; blk = true; } s.respawn = a[3] / 10; });
   if (blk) rebuildBlockers();
