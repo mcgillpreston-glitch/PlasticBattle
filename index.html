@@ -1951,7 +1951,10 @@ function updateUnit(u, dt) {
         u.wind.t += dt;
         if (u.wind.t >= u.wind.dur) { u.wind = null; attack(u, tgt); }
       }
-    } else { u.wind = null; if (spd > 0) { wantMove = true; stepToward(u, tgt.x, tgt.y, spd * dt, rng * 0.9); } }
+    } else { u.wind = null; if (spd > 0) { wantMove = true; var gx = tgt.x, gy = tgt.y;
+        /* Vehicles chasing a hero walk to the lane point beside it, not onto the hero: a hero at the field edge would otherwise pin them there. */
+        if (u.kind === 'minion' && (u.type === 'jeep' || u.type === 'tank') && tgt.kind === 'hero' && u.lane != null) { var hq0 = laneProj(tgt, u.lane); var lp = lanePt(hq0.t, clamp(hq0.off, -60, 60), u.lane); gx = lp.x; gy = lp.y; }
+        stepToward(u, gx, gy, spd * dt, rng * 0.9); } }
   } else if (u.move && spd > 0) {
     u.wind = null;
     wantMove = true;
