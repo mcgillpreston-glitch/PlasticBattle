@@ -408,6 +408,7 @@ function timeUp() {
   G.structs.forEach(function (s) { if (!s.dead) hp[s.team] += s.hp; mx[s.team] += s.maxHp; });
   var f0 = mx[0] ? hp[0] / mx[0] : 0, f1 = mx[1] ? hp[1] / mx[1] : 0;
   var winner = Math.abs(f0 - f1) < 0.02 ? -1 : (f0 > f1 ? 0 : 1);
+  tallyCash();
   G.over = true; G.winner = winner; emit('end', winner, 'time');
 }
 function updateBarrage(dt) {

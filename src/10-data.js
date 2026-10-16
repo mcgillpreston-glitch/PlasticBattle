@@ -94,6 +94,18 @@ var HEROES = [
 var RAMP = { perTurret: 1, max: 3 };
 /* Minions keep advancing along their lane while they fire, instead of stopping at first contact. */
 var WALK_SHOOT = true;
+/* Cash: what each action pays. Stash take-outs pay STASH_CUT of the stashed amount; the HQ keeps the rest. */
+var CASH = { cs: 10, hero: 150, perLvl: 25, assist: 40, turret: 120, perOrder: 60 };
+var STASH_CUT = 0.8;
+/* Shop: five unique slots per hero, no stacking. mods adds to the hero's aug fields (hpMul, dmg, as, range). */
+var SHOP_SLOTS = 5;
+var SHOP_CATS = ['MREs', 'Training', 'Optics'];
+var SHOP_ITEMS = [
+  { id: 'ration', cat: 'MREs', name: 'Field ration', price: 120, mods: { hpMul: 0.10 }, blurb: '+10% max HP' },
+  { id: 'manual', cat: 'Training', name: 'Drill manual', price: 150, mods: { dmg: 0.10 }, blurb: '+10% damage' },
+  { id: 'hands', cat: 'Training', name: 'Quick hands', price: 150, mods: { as: 0.10 }, blurb: '+10% attack speed' },
+  { id: 'scope', cat: 'Optics', name: 'Scope', price: 150, mods: { range: 25 }, blurb: '+25 attack range' }
+];
 var MATCH_LEN = 10 * 60;
 var TUNE = { cdMul: 0.7, acdMul: 0.8 };
 HEROES.forEach(function (h) {
@@ -139,15 +151,57 @@ function seeded(s) { var x = s || 1; return function () { x = (x * 1664525 + 101
 var MAP = { W: 3840, H: 2160 };
 var FOUNT = [{ x: 620, y: 1620 }, { x: 3350, y: 330 }];
 var LANE_DEF = [
-  { name: 'top', pts: [[620, 1620, 110], [660, 1400, 110], [600, 1200, 105], [520, 1040, 100], [500, 880, 100], [580, 700, 100], [780, 520, 100], [1040, 540, 100], [1240, 420, 100], [1400, 320, 100], [1600, 300, 100], [1800, 240, 100], [2000, 250, 90], [2200, 340, 80], [2420, 380, 90], [2600, 310, 100], [2800, 260, 100], [2960, 260, 100], [3150, 300, 110], [3350, 330, 110]] },
-  { name: 'mid', pts: [[620, 1620, 120], [830, 1500, 120], [1040, 1470, 120], [1250, 1330, 120], [1500, 1200, 120], [1750, 1080, 120], [2000, 1000, 120], [2110, 960, 120], [2300, 880, 120], [2500, 790, 120], [2700, 700, 120], [2900, 610, 120], [3100, 540, 120], [3220, 480, 120], [3300, 400, 120], [3350, 330, 120]] },
-  { name: 'bot', pts: [[620, 1620, 110], [830, 1500, 110], [1120, 1490, 105], [1330, 1560, 95], [1520, 1610, 90], [1700, 1630, 85], [1900, 1650, 85], [2100, 1760, 95], [2300, 1800, 100], [2500, 1740, 100], [2650, 1620, 100], [2800, 1510, 100], [2900, 1480, 100], [3100, 1490, 100], [3240, 1320, 100], [3320, 1160, 100], [3350, 1000, 100], [3400, 850, 100], [3380, 700, 100], [3300, 580, 100], [3220, 480, 110], [3300, 400, 110], [3350, 330, 110]] }
+  { name: 'top', pts: [[620, 1621, 101], [459, 1423, 101], [344, 1194, 101], [436, 918, 101], [689, 574, 101], [942, 413, 101], [1194, 252, 101], [1470, 195, 101], [1837, 138, 101], [2182, 133, 101], [2526, 119, 101], [2894, 92, 101], [3123, 115, 101], [3261, 344, 101]] },
+  { name: 'mid', pts: [[620, 1621, 101], [827, 1469, 101], [1056, 1308, 101], [1286, 1148, 101], [1493, 1056, 101], [1745, 1033, 101], [2021, 987, 101], [2205, 895, 101], [2480, 769, 101], [2756, 666, 101], [3055, 505, 101], [3261, 344, 101]] },
+  { name: 'bot', pts: [[620, 1621, 101], [758, 1745, 101], [1033, 1836, 101], [1378, 1882, 101], [1745, 1928, 101], [2113, 1940, 101], [2480, 1905, 101], [2756, 1813, 101], [2986, 1676, 101], [3215, 1584, 101], [3445, 1469, 101], [3583, 1240, 101], [3629, 1010, 101], [3491, 780, 101], [3353, 608, 101]] }
 ];
-/* extra walkable pieces: the fort yards, so heroes can move about their base */
+/* extra walkable pieces: jungle routes, river paths up to the bridges, and the fort yards */
 var FIELD_EXTRA = [
-  { ax: 380, ay: 1360, bx: 760, by: 1720, r: 250 }, { ax: 3050, ay: 250, bx: 3600, by: 440, r: 240 },
-  { ax: 900, ay: 1480, bx: 1300, by: 1450, r: 170 }, { ax: 3060, ay: 440, bx: 3230, by: 500, r: 120 },
-  { ax: 1060, ay: 520, bx: 1270, by: 1270, r: 90 }   // the rut between the left tower ring and the centre hill, joining the top and mid lanes
+  { ax: 1585, ay: 390, bx: 1952, by: 379, r: 60 },
+  { ax: 1952, ay: 379, bx: 2297, by: 379, r: 60 },
+  { ax: 2297, ay: 379, bx: 2434, by: 551, r: 60 },
+  { ax: 2434, ay: 551, bx: 2457, by: 735, r: 60 },
+  { ax: 2710, ay: 356, bx: 2825, by: 551, r: 60 },
+  { ax: 2825, ay: 551, bx: 2894, by: 597, r: 60 },
+  { ax: 712, ay: 780, bx: 919, by: 666, r: 60 },
+  { ax: 919, ay: 666, bx: 1148, by: 643, r: 60 },
+  { ax: 1148, ay: 643, bx: 1286, by: 780, r: 60 },
+  { ax: 1286, ay: 780, bx: 1355, by: 1033, r: 60 },
+  { ax: 735, ay: 780, bx: 804, by: 1010, r: 60 },
+  { ax: 804, ay: 1010, bx: 919, by: 1194, r: 60 },
+  { ax: 919, ay: 1194, bx: 1102, by: 1194, r: 60 },
+  { ax: 1102, ay: 1194, bx: 1378, by: 1079, r: 60 },
+  { ax: 2389, ay: 1079, bx: 2549, by: 1033, r: 60 },
+  { ax: 2549, ay: 1033, bx: 2733, by: 1079, r: 60 },
+  { ax: 2733, ay: 1079, bx: 2940, by: 1194, r: 60 },
+  { ax: 2940, ay: 1194, bx: 3032, by: 1377, r: 60 },
+  { ax: 3032, ay: 1377, bx: 3055, by: 1469, r: 60 },
+  { ax: 2733, ay: 1010, bx: 2940, by: 872, r: 60 },
+  { ax: 2940, ay: 872, bx: 3100, by: 872, r: 60 },
+  { ax: 3100, ay: 872, bx: 3215, by: 1010, r: 60 },
+  { ax: 3215, ay: 1010, bx: 3215, by: 1194, r: 60 },
+  { ax: 3215, ay: 1194, bx: 3100, by: 1331, r: 60 },
+  { ax: 1148, ay: 1515, bx: 1424, by: 1469, r: 60 },
+  { ax: 1424, ay: 1469, bx: 1608, by: 1584, r: 60 },
+  { ax: 1608, ay: 1584, bx: 1814, by: 1676, r: 60 },
+  { ax: 1654, ay: 1377, bx: 1837, by: 1240, r: 60 },
+  { ax: 1837, ay: 1240, bx: 2067, by: 1171, r: 60 },
+  { ax: 2067, ay: 1171, bx: 2297, by: 1194, r: 60 },
+  { ax: 2297, ay: 1194, bx: 2572, by: 1285, r: 60 },
+  { ax: 2572, ay: 1285, bx: 2940, by: 1469, r: 60 },
+  { ax: 2940, ay: 1469, bx: 2986, by: 1561, r: 60 },
+  { ax: 1217, ay: 482, bx: 1470, by: 551, r: 69 },
+  { ax: 1470, ay: 551, bx: 1745, by: 757, r: 69 },
+  { ax: 1745, ay: 757, bx: 1952, by: 872, r: 69 },
+  { ax: 1952, ay: 872, bx: 2067, by: 964, r: 69 },
+  { ax: 2297, ay: 1194, bx: 2526, by: 1331, r: 69 },
+  { ax: 2526, ay: 1331, bx: 2756, by: 1469, r: 69 },
+  { ax: 2756, ay: 1469, bx: 2963, by: 1607, r: 69 },
+  { ax: 2963, ay: 1607, bx: 3146, by: 1745, r: 69 },
+  { ax: 459, ay: 1423, bx: 689, by: 1607, r: 138 },
+  { ax: 689, ay: 1607, bx: 758, by: 1905, r: 138 },
+  { ax: 3261, ay: 344, bx: 3399, by: 252, r: 115 },
+  { ax: 3399, ay: 252, bx: 3445, by: 211, r: 138 }
 ];
 var LANES = LANE_DEF.map(function (d, li) {
   var pts = d.pts.map(function (p) { return { x: p[0], y: p[1], r: p[2] }; }), cum = [0];
@@ -156,6 +210,17 @@ var LANES = LANE_DEF.map(function (d, li) {
 });
 var FIELD_CAPS = [];
 LANES.forEach(function (L) { for (var i = 0; i < L.pts.length - 1; i++) { var a = L.pts[i], b = L.pts[i + 1]; FIELD_CAPS.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, r: Math.min(a.r, b.r), lane: L.i }); } });
+/* Painted sand rings are open ground: each one is walkable as a disc so its turret can stand on it. */
+var RING_R = 150;
+/* Turret rings (see below for the turrets themselves). Turrets: two per lane per team (outer, inner), each a sandbag pillbox sitting on one of the twelve painted sand rings.
+   Ring centres are in the art's pixel space (1672 x 941) and converted to world units. Each lane has four rings: the two nearer
+   the green fort belong to green (inner = nearer green's fort, outer = nearer the middle), the two nearer the tan castle to tan. */
+var TURRET_RINGS = {
+  top: [{ team: 0, order: 2, px: [210, 425] }, { team: 0, order: 1, px: [445, 225] }, { team: 1, order: 1, px: [785, 120] }, { team: 1, order: 2, px: [1112, 95] }],
+  mid: [{ team: 0, order: 2, px: [465, 600] }, { team: 0, order: 1, px: [660, 520] }, { team: 1, order: 1, px: [1080, 405] }, { team: 1, order: 2, px: [1245, 325] }],
+  bot: [{ team: 0, order: 2, px: [740, 785] }, { team: 0, order: 1, px: [1060, 785] }, { team: 1, order: 1, px: [1420, 640] }, { team: 1, order: 2, px: [1500, 445] }]
+};
+Object.keys(TURRET_RINGS).forEach(function (k) { TURRET_RINGS[k].forEach(function (r) { var x = Math.round(r.px[0] * MAP.W / 1672), y = Math.round(r.px[1] * MAP.H / 941); FIELD_EXTRA.push({ ax: x, ay: y, bx: x, by: y, r: RING_R }); }); });
 FIELD_EXTRA.forEach(function (c) { FIELD_CAPS.push({ ax: c.ax, ay: c.ay, bx: c.bx, by: c.by, r: c.r, lane: -1 }); });
 FIELD_CAPS.forEach(function (c) { c.minx = Math.min(c.ax, c.bx) - c.r; c.maxx = Math.max(c.ax, c.bx) + c.r; c.miny = Math.min(c.ay, c.by) - c.r; c.maxy = Math.max(c.ay, c.by) + c.r; });
 /* bucket grid so a field query only looks at the few capsules nearby (a point more than FB_REACH outside every capsule reads as far outside) */
@@ -235,31 +300,12 @@ function laneOf(u) { return u.lane != null ? u.lane : nearestLane(u); }
 function fountain(team) { return FOUNT[team]; }
 function progress(u) { var t = laneProj(u, laneOf(u)).t; return u.team === 0 ? t : 1 - t; }
 
-/* Turrets: three per lane per team (outer, middle, inner), each a sandbag pillbox. Every turret sits at the same lane position for both teams,
-   mirrored along the lane (green 0.42 / 0.30 / 0.17, tan 0.58 / 0.70 / 0.83) and on the same side of the lane, so the two forts line up. */
 var STRUCT_DEF = [];
 LANES.forEach(function (L) {
-  // one offset per lane slot, shared by both teams, so the two forts match; moved in toward the spine until both spots are at least 24 units inside the walkable field
-  [[1, 0.42, 0.58], [2, 0.3, 0.7], [3, 0.17, 0.83]].forEach(function (k) {
-    var side0 = L.name === 'top' ? 1 : L.name === 'bot' ? -1 : (k[0] % 2 ? 1 : -1), side = side0;
-    var pos = function (t, off) {
-      var q = lanePt(t, 0, L.i), q2 = lanePt(t + 0.002, 0, L.i), dx = q2.x - q.x, dy = q2.y - q.y, len = vlen(dx, dy) || 1;
-      return { x: Math.round(q.x - dy / len * side * off), y: Math.round(q.y + dx / len * side * off) };
-    };
-    var r = 0; L.pts.forEach(function (p, i) { if (L.cum[i] <= k[1] * L.len) r = p.r; });
-    var off = r + 64, a, b, ok = false;
-    // prefer the usual side and the largest offset; the opposite side is tried only if the usual one has no walkable spot
-    [side0, -side0].some(function (sd) {
-      side = sd;
-      for (off = r + 64; off >= 0; off -= 2) {
-        a = pos(k[1], off); b = pos(k[2], off);
-        if (fieldSD(a.x, a.y) >= 24 && fieldSD(b.x, b.y) >= 24) return (ok = true);
-      }
-      return false;
-    });
-    [[0, k[1], a], [1, k[2], b]].forEach(function (e) {
-      STRUCT_DEF.push({ team: e[0], lane: L.i, kind: 'outpost', order: k[0], x: e[2].x, y: e[2].y, t: e[1], painted: null });
-    });
+  (TURRET_RINGS[L.name] || []).forEach(function (r) {
+    var x = Math.round(r.px[0] * MAP.W / 1672), y = Math.round(r.px[1] * MAP.H / 941);
+    var t = laneProj({ x: x, y: y }, L.i).t;
+    STRUCT_DEF.push({ team: r.team, lane: L.i, kind: 'outpost', order: r.order, x: x, y: y, t: t, painted: null });
   });
 });
 STRUCT_DEF.push({ team: 0, lane: -1, kind: 'hq', order: 4, x: 500, y: 1440, t: 0 });
@@ -271,7 +317,7 @@ var PROP_C = [
   { x: 2960, y: 250, r: 60, tag: 'tower' }, { x: 3600, y: 550, r: 60, tag: 'tower' }, { x: 3130, y: 290, r: 45, tag: 'tower' }
 ];
 /* weeds: hiding spots on the painted grass tufts */
-var BRUSH = [ { x: 1570, y: 960, rx: 130, ry: 70 }, { x: 2320, y: 1480, rx: 130, ry: 70 }, { x: 2660, y: 1240, rx: 120, ry: 65 }, { x: 1280, y: 430, rx: 110, ry: 60 } ];
+var BRUSH = [ { x: 1033, y: 918, rx: 130, ry: 70 }, { x: 2021, y: 597, rx: 130, ry: 70 }, { x: 2756, y: 1148, rx: 130, ry: 70 }, { x: 2067, y: 1377, rx: 130, ry: 70 }, { x: 1424, y: 1584, rx: 130, ry: 70 } ];
 function inBrush(p) {
   for (var i = 0; i < BRUSH.length; i++) {
     var b = BRUSH[i], dx = p.x - b.x, dy = p.y - b.y;

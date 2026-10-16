@@ -144,13 +144,14 @@ function openSB(mode) { if (!G) return; sbMode = mode; sbEl.hidden = false; rend
 function closeSB() { sbEl.hidden = true; sbMode = null; }
 function renderSB() {
   var heroes = G.units.filter(function (u) { return u.kind === 'hero'; });
-  var cols = ['k', 'cs', 'dmgH', 'dmgS', 'taken', 'heal'], best = {};
+  heroes.forEach(function (h) { if (NET.mode !== 'online') h.st.cash = cashValue(h); });
+  var cols = ['k', 'cs', 'cash', 'dmgH', 'dmgS', 'taken', 'heal'], best = {};
   cols.forEach(function (c) { var m = 0; heroes.forEach(function (h) { m = Math.max(m, h.st[c]); }); best[c] = m; });
   var teams = [0, 1].map(function (team) {
     var hs = heroes.filter(function (h) { return h.team === team; });
     var sum = function (k) { return hs.reduce(function (a, h) { return a + h.st[k]; }, 0); };
     var mine = G.structs.filter(function (s) { return s.team === team; }), theirs = G.structs.filter(function (s) { return s.team !== team; });
-    return { team: team, hs: hs, k: G.kills[team], d: sum('d'), a: sum('a'), cs: sum('cs'), dmgH: sum('dmgH'), dmgS: sum('dmgS'), heal: sum('heal'),
+    return { team: team, hs: hs, k: G.kills[team], d: sum('d'), a: sum('a'), cs: sum('cs'), cash: sum('cash'), dmgH: sum('dmgH'), dmgS: sum('dmgS'), heal: sum('heal'),
       held: mine.filter(function (s) { return !s.dead; }).length, taken: theirs.filter(function (s) { return s.dead; }).length,
       lvl: hs.length ? hs.reduce(function (a, h) { return a + h.lvl; }, 0) / hs.length : 0, orders: hs.reduce(function (a, h) { return a + h.augs.length; }, 0) };
   });
@@ -163,8 +164,8 @@ function renderSB() {
     html += '<section class="sbteam ' + cls + '"><header><h3>' + name + '</h3><div class="sbstats">' +
       '<span>Kills <b>' + T.k + '</b></span><span>Deaths <b>' + T.d + '</b></span><span>Assists <b>' + T.a + '</b></span>' +
       '<span>Positions held <b>' + T.held + '/7</b></span><span>Positions taken <b>' + T.taken + '</b></span>' +
-      '<span>Hero dmg <b>' + kfmt(T.dmgH) + '</b></span><span>Structure dmg <b>' + kfmt(T.dmgS) + '</b></span><span>CS <b>' + T.cs + '</b></span><span>Avg level <b>' + T.lvl.toFixed(1) + '</b></span><span>Orders <b>' + T.orders + '</b></span>' +
-      '</div></header><div class="sbwrap"><table class="sbt"><thead><tr><th scope="col">Soldier</th><th scope="col">Lvl</th><th scope="col">K / D / A</th><th scope="col">CS</th><th scope="col">Hero dmg</th><th scope="col">Struct dmg</th><th scope="col">Dmg taken</th><th scope="col">Heal/Shield</th><th scope="col">Best streak</th><th scope="col">Orders</th><th scope="col">Status</th></tr></thead><tbody>';
+      '<span>Hero dmg <b>' + kfmt(T.dmgH) + '</b></span><span>Structure dmg <b>' + kfmt(T.dmgS) + '</b></span><span>CS <b>' + T.cs + '</b></span><span>Team cash <b>' + kfmt(T.cash) + '</b></span><span>Avg level <b>' + T.lvl.toFixed(1) + '</b></span><span>Orders <b>' + T.orders + '</b></span>' +
+      '</div></header><div class="sbwrap"><table class="sbt"><thead><tr><th scope="col">Soldier</th><th scope="col">Lvl</th><th scope="col">K / D / A</th><th scope="col">CS</th><th scope="col" title="Cash held plus anything stashed at the HQ">Cash</th><th scope="col">Hero dmg</th><th scope="col">Struct dmg</th><th scope="col">Dmg taken</th><th scope="col">Heal/Shield</th><th scope="col">Best streak</th><th scope="col">Orders</th><th scope="col">Status</th></tr></thead><tbody>';
     T.hs.forEach(function (h) {
       var b = function (c, v) { return '<td' + (best[c] > 0 && h.st[c] === best[c] ? ' class="best"' : '') + '>' + v + '</td>'; };
       var hpPct = Math.round(100 * clamp(h.hp / maxHp(h), 0, 1));
@@ -172,7 +173,7 @@ function renderSB() {
       html += '<tr class="' + (h.isPlayer ? 'me' : '') + (h.dead ? ' down' : '') + '"><td><span class="who"><img alt="" src="' + portrait(h.pose, h.team) + '"><span class="nm">' + h.name + '</span>' + (h.isPlayer ? '<span class="you">YOU</span>' : '') + '</span></td>' +
         '<td><span class="lv">' + h.lvl + '</span></td>' +
         '<td' + (best.k > 0 && h.st.k === best.k ? ' class="best"' : '') + '>' + h.st.k + ' / ' + h.st.d + ' / ' + h.st.a + '</td>' +
-        b('cs', h.st.cs) + b('dmgH', kfmt(h.st.dmgH)) + b('dmgS', kfmt(h.st.dmgS)) + b('taken', kfmt(h.st.taken)) + b('heal', kfmt(h.st.heal)) +
+        b('cs', h.st.cs) + b('cash', kfmt(h.st.cash)) + b('dmgH', kfmt(h.st.dmgH)) + b('dmgS', kfmt(h.st.dmgS)) + b('taken', kfmt(h.st.taken)) + b('heal', kfmt(h.st.heal)) +
         '<td>' + h.st.best + '</td><td title="' + h.augs.map(function (a) { return typeof a === 'string' ? a : a.n; }).join(', ') + '">' + h.augs.length + '</td><td>' + status + '</td></tr>';
     });
     html += '</tbody></table></div></section>';
@@ -231,7 +232,7 @@ document.addEventListener('keydown', unlockAudio, { once: true });
 cv.addEventListener('pointerdown', function (e) {
   if (!G) return;
   var r = cv.getBoundingClientRect();
-  if (e.pointerType === 'mouse') { order(e.clientX - r.left, e.clientY - r.top); return; }
+  if (e.pointerType === 'mouse') { var pw = s2w(e.clientX - r.left, e.clientY - r.top); if (ownHqAt(pw)) { openShop(); return; } order(e.clientX - r.left, e.clientY - r.top); return; }
   drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false };
 });
 cv.addEventListener('pointermove', function (e) {
@@ -255,6 +256,7 @@ window.addEventListener('keydown', function (e) {
   if (e.key === 'Tab') { e.preventDefault(); if (sbEl.hidden) openSB('hold'); return; }
   var k = e.key.toUpperCase();
   if (k === 'ESCAPE' && !sbEl.hidden) { closeSB(); return; }
+  if (!shopModal.hidden && k !== 'P' && k !== 'ESCAPE') return;
   if (['Q', 'W', 'E', 'R', 'D', 'F'].indexOf(k) >= 0) {
     if (!ordersModal.hidden) return;
     var w = mouse.inside ? s2w(mouse.x, mouse.y) : { x: G.player.x + G.player.facing * 200, y: G.player.y };
@@ -265,7 +267,9 @@ window.addEventListener('keydown', function (e) {
   else if (k === 'Y') { cam.lock = !cam.lock; showToast(cam.lock ? 'Camera locked' : 'Camera free', 1); }
   else if (k === 'O') { if (ordersModal.hidden) openOrders(); else ordersModal.hidden = true; }
   else if (k === 'C') { if (swapModal.hidden) openSwap(); else swapModal.hidden = true; }
+  else if (k === 'P') { toggleShop(); }
   else if (k === 'ESCAPE') {
+    if (!shopModal.hidden) { closeShop(); return; }
     if (aimSlot || aMovePending) { aimSlot = null; aMovePending = false; refreshAim(); }
     else if (!ordersModal.hidden || !swapModal.hidden) { ordersModal.hidden = true; swapModal.hidden = true; }
     else if (!menuEl.hidden) closeMenu(); else openMenu();

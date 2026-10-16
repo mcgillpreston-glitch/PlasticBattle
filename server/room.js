@@ -146,8 +146,15 @@ class Room {
         const me = u ? this.meOf(u) : 0;
         this.send(p, '{"t":"s",' + teamBody[p.team] + ',"me":' + JSON.stringify(me) + '}');
       });
+      if (this.tickN % 10 === 0) {
+        this.players.forEach(p => {
+          const u = this.heroOf(p); if (!u) return;
+          const stash = G.stash.filter(e => e.team === u.team).map(e => { const o = G.units.find(x => x.id === e.owner); return { sid: e.sid, amt: e.amt, owner: o ? (o.pname || o.name) : 'Someone', mine: e.owner === u.id }; });
+          this.send(p, { t: 'shop', cash: u.cash, items: u.items, atHq: !!C.atHq(u), stash: stash });
+        });
+      }
       if (this.tickN % 20 === 0 || G.over) {
-        const sb = JSON.stringify({ t: 'sb', h: G.units.filter(u => u.kind === 'hero').map(u => [u.id, u.lvl, u.st.k, u.st.d, u.st.a, u.st.cs, Math.round(u.st.dmgH), Math.round(u.st.dmgS), Math.round(u.st.taken), Math.round(u.st.heal), u.st.best, u.augs.length, u.dead ? 1 : 0, Math.round(Math.max(0, u.respawn) * 10)]) });
+        const sb = JSON.stringify({ t: 'sb', h: G.units.filter(u => u.kind === 'hero').map(u => [u.id, u.lvl, u.st.k, u.st.d, u.st.a, u.st.cs, Math.round(u.st.dmgH), Math.round(u.st.dmgS), Math.round(u.st.taken), Math.round(u.st.heal), u.st.best, u.augs.length, u.dead ? 1 : 0, Math.round(Math.max(0, u.respawn) * 10), C.cashValue(u)]) });
         this.players.forEach(p => this.send(p, sb));
       }
       if (G.over && !this.overAt) {
@@ -262,6 +269,9 @@ class Room {
         if (C.ordersOwed(u) > 0) C.rollOffer(u);
         break;
       }
+      case 'buy': { if (typeof m.id === 'string') C.buyItem(u, m.id); break; }
+      case 'dep': { const amt = num(m.amt, 1, 1e6); if (amt != null) C.depositCash(u, amt); break; }
+      case 'wd': { const sid = num(m.sid, 1, 1e9); if (sid != null) C.withdrawCash(u, sid); break; }
       case 'redraw': {
         const i = num(m.i, 0, 2); if (i == null || !u.offer) return;
         const c = u.offer.cards[i]; if (!c || c.rerolled || !u.offer.spare.length) return;
