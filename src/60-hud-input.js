@@ -450,6 +450,10 @@ function frame(now) {
       var dead = G.player.dead, tgt = dead ? (G.death && G.player.respawn > 1.6 ? G.death : fountain(MYTEAM)) : G.player, k = Math.min(1, raw * (dead ? 3.5 : 14));
       cam.x += (tgt.x - cam.x) * k; cam.y += (tgt.y - cam.y) * k;
     }
+    // keep the view on the painted sandbox: never show past its edges (centred when the view is wider than the map)
+    var hw = VW / 2 / cam.z, hh = VH / 2 / cam.z;
+    cam.x = hw * 2 >= MAP.W ? MAP.W / 2 : clamp(cam.x, hw, MAP.W - hw);
+    cam.y = hh * 2 >= MAP.H ? MAP.H / 2 : clamp(cam.y, hh, MAP.H - hh);
     var mw = s2w(mouse.x, mouse.y); mouse.wx = mw.x; mouse.wy = mw.y;
     hudT -= raw; if (hudT <= 0) { hudT = 0.1; hud(); }
   }
