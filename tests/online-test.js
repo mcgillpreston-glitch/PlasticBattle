@@ -104,6 +104,20 @@ function check(name, ok, detail) { results.push({ name, ok: !!ok, detail }); con
     check('ABILITY: a dash moves the unit at once', ex1 - ex0 > 10, { movedInMs: Math.round(ex1 - ex0) });
   }
 
+  // ---- projectile prediction: a shot appears at once and hands over to the server's copy ----
+  const projSlot = await A.evaluate(() => { const p = window.__PF.G.player; return ['Q', 'W', 'E', 'R'].find(k => p.spec[k] && p.spec[k].t === 'proj' && !(p.cd[k] > 0)) || null; });
+  if (projSlot) {
+    await A.evaluate(s => { const PF = window.__PF, p = PF.G.player; PF.cmdCast(s, PF.clearDir(p, 400)); }, projSlot);
+    await sleep(40);
+    const localNow = await A.evaluate(() => { const G = window.__PF.G; return G.proj.filter(q => !q.id && q.team === G.player.team).length; });
+    check('PROJ: a shot appears at once on the press', localNow >= 1, { slot: projSlot, local: localNow });
+    await sleep(1500);
+    const later = await A.evaluate(() => { const G = window.__PF.G; return { local: G.proj.filter(q => !q.id && q.team === G.player.team).length, mine: G.proj.filter(q => q.team === G.player.team).length }; });
+    check('PROJ: the local copy hands over to the server copy (no duplicates left behind)', later.local === 0, later);
+  } else {
+    console.log('note: the test hero has no projectile ability ready; PROJ checks skipped');
+  }
+
   // Move both players toward mid by clicking the ground ahead of them
   const startA = a.me;
   await A.mouse.move(1000, 250); await A.mouse.click(1000, 250);
