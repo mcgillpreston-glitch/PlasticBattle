@@ -3,7 +3,7 @@
 // A player is { cid, name, team, hero, rerolls, uid, send(string|object) }; the host owns sockets, rate limits and timers' environment.
 'use strict';
 
-const TICK_MS = 50;            // 20 snapshots per second
+const TICK_MS = 33;            // 30 snapshots per second
 const SUBSTEPS = 2;            // 40 Hz simulation
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const SLOTS = ['Q', 'W', 'E', 'R', 'D', 'F'];

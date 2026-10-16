@@ -141,12 +141,12 @@ function drawScene(shx, shy, zoomHint) {
       ctx.fillStyle = '#3F4A2A'; ctx.fillRect(-16, -6, 32, 12); ctx.fillStyle = '#596640'; ctx.beginPath(); ctx.moveTo(16, -6); ctx.lineTo(26, 0); ctx.lineTo(16, 6); ctx.closePath(); ctx.fill();
       ctx.restore();
     } else if (p.kind === 'jack') { streak(p.x, p.y, pa, 44, 4, '#E0703F', 'rgba(224,112,63,0)'); }
-    else { var big = p.kind === 'shot'; streak(p.x, p.y, pa, big ? 70 : 40, big ? 5 : 3, p.team === 0 ? '#F4FFD0' : '#FFE6B0', p.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)'); if (big) { ctx.fillStyle = '#FFFFFF'; ell(ctx, p.x, p.y, 4, 4); ctx.fill(); } }
+    else { var big = p.kind === 'shot'; streak(p.x, p.y, pa, big ? 96 : 66, big ? 7 : 5, p.team === 0 ? '#F4FFD0' : '#FFE6B0', p.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)'); ctx.fillStyle = '#FFFFFF'; ell(ctx, p.x, p.y, big ? 6 : 5, big ? 6 : 5); ctx.fill(); }
   });
   G.rounds.forEach(function (r) {
     var a = Math.atan2(r.ly - r.y, r.lx - r.x), heavy = r.heavy;
-    streak(r.x, r.y, a, heavy ? 56 : r.hero ? 46 : 30, heavy ? 5 : r.hero ? 3.5 : 2.2, heavy ? '#FFD08A' : r.team === 0 ? '#F4FFD0' : '#FFE6B0', heavy ? 'rgba(255,150,60,0)' : r.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)');
-    if (heavy || r.hero) { ctx.fillStyle = '#FFFFFF'; ell(ctx, r.x, r.y, heavy ? 4 : 2.5, heavy ? 4 : 2.5); ctx.fill(); }
+    streak(r.x, r.y, a, heavy ? 80 : r.hero ? 72 : 52, heavy ? 7 : r.hero ? 5.5 : 4, heavy ? '#FFD08A' : r.team === 0 ? '#F4FFD0' : '#FFE6B0', heavy ? 'rgba(255,150,60,0)' : r.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)');
+    ctx.fillStyle = '#FFFFFF'; ell(ctx, r.x, r.y, heavy ? 5 : r.hero ? 4 : 3, heavy ? 5 : r.hero ? 4 : 3); ctx.fill();
   });
   G.lobs.forEach(function (l) {
     var p = Math.min(1, l.t / l.delay), gx = l.sx + (l.x - l.sx) * p, gy = (l.sy + 50) + (l.y - l.sy - 50) * p, x = l.sx + (l.x - l.sx) * p, y = l.sy + (l.y - l.sy) * p - Math.sin(p * Math.PI) * 220;

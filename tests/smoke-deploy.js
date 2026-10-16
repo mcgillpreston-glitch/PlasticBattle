@@ -44,7 +44,7 @@ function player(code, name) {
   check('host starts the match; both players receive snapshots', started, { aSnaps: A.snaps, bSnaps: B.snaps, time: A.last && A.last.tm });
   const s0 = A.snaps, t1 = Date.now(); await sleep(2000);
   const rate = (A.snaps - s0) / ((Date.now() - t1) / 1000);
-  check('snapshot rate near 20/s', rate > 14, { perSec: Math.round(rate) });
+  check('snapshot rate near 30/s', rate > 20, { perSec: Math.round(rate) });
   const me = A.last && A.last.u.find(a => a[0] === A.start.you);
   if (me) { A.send({ t: 'move', x: me[3] + 300, y: me[4] - 150 }); await sleep(1500); const me2 = A.last.u.find(a => a[0] === A.start.you); check('move is applied by the Durable Object sim', me2 && Math.hypot(me2[3] - me[3], me2[4] - me[4]) > 100, me2 && { from: [me[3], me[4]], to: [me2[3], me2[4]] }); }
   else check('move is applied by the Durable Object sim', false, 'no self unit in snapshot');

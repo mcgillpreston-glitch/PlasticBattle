@@ -174,7 +174,7 @@ function goalTaken(u) {
 function aaStyle(u) { return u.kind === 'hero' ? u.spec.aa : (u.type === 'melee' ? 'melee' : u.type === 'tank' ? 'tank' : u.type === 'mortar' ? 'shell' : 'bullet'); }
 function windTime(u) {
   var s = aaStyle(u);
-  if (u.kind === 'hero') return s === 'melee' ? 0.12 : s === 'shell' ? 0.22 : Math.min(0.16, aaCd(u) * 0.35);
+  if (u.kind === 'hero') return (s === 'melee' ? 0.12 : s === 'shell' ? 0.22 : Math.min(0.16, aaCd(u) * 0.35)) * 0.6;
   return s === 'tank' ? 0.32 : s === 'melee' ? 0.14 : 0.2;
 }
 function aimPoint(t) { return { x: t.x, y: t.isStruct ? t.y - 50 : t.y - unitH(t) * 0.45 }; }

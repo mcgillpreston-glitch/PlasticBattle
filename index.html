@@ -628,6 +628,12 @@ var HEROES = [
   E:{n:'Shadow Step',t:'dash',cd:9,dist:320},
   R:{n:'Night Raid',t:'buff',cd:45,dur:4,b:{ms:.4,dmgMul:.4,ghost:1}}}
 ];
+/* Tuning pass: ability cooldowns are 30% shorter and the gap between basic shots 20% shorter (the hero table above keeps the design numbers). */
+var TUNE = { cdMul: 0.7, acdMul: 0.8 };
+HEROES.forEach(function (h) {
+  h.acd = Math.round(h.acd * TUNE.acdMul * 100) / 100;
+  ['Q', 'W', 'E', 'R'].forEach(function (k) { if (h[k] && h[k].cd) h[k].cd = Math.round(h[k].cd * TUNE.cdMul * 10) / 10; });
+});
 var TAG = { n:'Tag Round', t:'jack', cd:20, range:1200, speed:1300, w:22 };
 var DECK = { n:'Hit the Deck', t:'dash', cd:18, dist:210, iframe:.35 };
 
@@ -1870,7 +1876,7 @@ function goalTaken(u) {
 function aaStyle(u) { return u.kind === 'hero' ? u.spec.aa : (u.type === 'melee' ? 'melee' : u.type === 'tank' ? 'tank' : u.type === 'mortar' ? 'shell' : 'bullet'); }
 function windTime(u) {
   var s = aaStyle(u);
-  if (u.kind === 'hero') return s === 'melee' ? 0.12 : s === 'shell' ? 0.22 : Math.min(0.16, aaCd(u) * 0.35);
+  if (u.kind === 'hero') return (s === 'melee' ? 0.12 : s === 'shell' ? 0.22 : Math.min(0.16, aaCd(u) * 0.35)) * 0.6;
   return s === 'tank' ? 0.32 : s === 'melee' ? 0.14 : 0.2;
 }
 function aimPoint(t) { return { x: t.x, y: t.isStruct ? t.y - 50 : t.y - unitH(t) * 0.45 }; }
@@ -2290,12 +2296,12 @@ function drawScene(shx, shy, zoomHint) {
       ctx.fillStyle = '#3F4A2A'; ctx.fillRect(-16, -6, 32, 12); ctx.fillStyle = '#596640'; ctx.beginPath(); ctx.moveTo(16, -6); ctx.lineTo(26, 0); ctx.lineTo(16, 6); ctx.closePath(); ctx.fill();
       ctx.restore();
     } else if (p.kind === 'jack') { streak(p.x, p.y, pa, 44, 4, '#E0703F', 'rgba(224,112,63,0)'); }
-    else { var big = p.kind === 'shot'; streak(p.x, p.y, pa, big ? 70 : 40, big ? 5 : 3, p.team === 0 ? '#F4FFD0' : '#FFE6B0', p.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)'); if (big) { ctx.fillStyle = '#FFFFFF'; ell(ctx, p.x, p.y, 4, 4); ctx.fill(); } }
+    else { var big = p.kind === 'shot'; streak(p.x, p.y, pa, big ? 96 : 66, big ? 7 : 5, p.team === 0 ? '#F4FFD0' : '#FFE6B0', p.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)'); ctx.fillStyle = '#FFFFFF'; ell(ctx, p.x, p.y, big ? 6 : 5, big ? 6 : 5); ctx.fill(); }
   });
   G.rounds.forEach(function (r) {
     var a = Math.atan2(r.ly - r.y, r.lx - r.x), heavy = r.heavy;
-    streak(r.x, r.y, a, heavy ? 56 : r.hero ? 46 : 30, heavy ? 5 : r.hero ? 3.5 : 2.2, heavy ? '#FFD08A' : r.team === 0 ? '#F4FFD0' : '#FFE6B0', heavy ? 'rgba(255,150,60,0)' : r.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)');
-    if (heavy || r.hero) { ctx.fillStyle = '#FFFFFF'; ell(ctx, r.x, r.y, heavy ? 4 : 2.5, heavy ? 4 : 2.5); ctx.fill(); }
+    streak(r.x, r.y, a, heavy ? 80 : r.hero ? 72 : 52, heavy ? 7 : r.hero ? 5.5 : 4, heavy ? '#FFD08A' : r.team === 0 ? '#F4FFD0' : '#FFE6B0', heavy ? 'rgba(255,150,60,0)' : r.team === 0 ? 'rgba(169,196,110,0)' : 'rgba(224,160,80,0)');
+    ctx.fillStyle = '#FFFFFF'; ell(ctx, r.x, r.y, heavy ? 5 : r.hero ? 4 : 3, heavy ? 5 : r.hero ? 4 : 3); ctx.fill();
   });
   G.lobs.forEach(function (l) {
     var p = Math.min(1, l.t / l.delay), gx = l.sx + (l.x - l.sx) * p, gy = (l.sy + 50) + (l.y - l.sy - 50) * p, x = l.sx + (l.x - l.sx) * p, y = l.sy + (l.y - l.sy) * p - Math.sin(p * Math.PI) * 220;
@@ -3454,7 +3460,7 @@ window.__PF = { get G() { return G; }, get NET() { return NET; }, netSend: funct
 /* Browser only: online PvP. The server runs the match; this client sends commands and draws server snapshots. */
 var PF_DEFAULT_SERVER = 'wss://plastic-front.prestonmcgill.workers.dev/ws';   // the deployed game server on Cloudflare (see README); players can override it under Server
 /* Interpolation delay behind the newest snapshot: 60 ms on a steady connection, growing with measured arrival jitter up to 160 ms. */
-function interpDelay() { return clamp(0.06 + 2.5 * (NETC.jit == null ? 0.016 : NETC.jit), 0.06, 0.16); }
+function interpDelay() { return clamp(0.045 + 2.5 * (NETC.jit == null ? 0.016 : NETC.jit), 0.045, 0.14); }
 var NETC = { ws: null, code: null, leaving: false, lastErr: null, cid: null, room: null, snaps: [], cur: null, off: null, myUid: 0, aimT: 0, pingT: 0, ping: 0, inMatch: false, offerKey: '' };
 var KIND = ['hero', 'melee', 'rifle', 'tank', 'jeep', 'mortar'];
 var PKIND = ['shot', 'bullet', 'rocket', 'jack'];

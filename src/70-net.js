@@ -1,7 +1,7 @@
 /* Browser only: online PvP. The server runs the match; this client sends commands and draws server snapshots. */
 var PF_DEFAULT_SERVER = 'wss://plastic-front.prestonmcgill.workers.dev/ws';   // the deployed game server on Cloudflare (see README); players can override it under Server
 /* Interpolation delay behind the newest snapshot: 60 ms on a steady connection, growing with measured arrival jitter up to 160 ms. */
-function interpDelay() { return clamp(0.06 + 2.5 * (NETC.jit == null ? 0.016 : NETC.jit), 0.06, 0.16); }
+function interpDelay() { return clamp(0.045 + 2.5 * (NETC.jit == null ? 0.016 : NETC.jit), 0.045, 0.14); }
 var NETC = { ws: null, code: null, leaving: false, lastErr: null, cid: null, room: null, snaps: [], cur: null, off: null, myUid: 0, aimT: 0, pingT: 0, ping: 0, inMatch: false, offerKey: '' };
 var KIND = ['hero', 'melee', 'rifle', 'tank', 'jeep', 'mortar'];
 var PKIND = ['shot', 'bullet', 'rocket', 'jack'];
