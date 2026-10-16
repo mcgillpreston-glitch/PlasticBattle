@@ -195,19 +195,19 @@ function pickAt(w) {
 }
 /* Player commands: applied directly offline, sent to the server online. */
 function cmdMove(pt, amove) {
-  if (NET.mode === 'online') { netSend({ t: 'move', x: Math.round(pt.x), y: Math.round(pt.y), a: amove ? 1 : 0 }); G.player.target = null; return; }
+  if (NET.mode === 'online') { netSend({ t: 'move', x: Math.round(pt.x), y: Math.round(pt.y), a: amove ? 1 : 0 }); G.player.target = null; predMove(pt); return; }
   var u = G.player; u.target = null; u.move = pt; u.amove = amove ? pt : null;
 }
 function cmdTarget(t) {
-  if (NET.mode === 'online') { netSend({ t: 'atk', id: t.id }); G.player.target = t; return; }
+  if (NET.mode === 'online') { netSend({ t: 'atk', id: t.id }); G.player.target = t; predOff(); return; }
   var u = G.player; u.target = t; u.move = null; u.amove = null;
 }
 function cmdCast(slot, w) {
-  if (NET.mode === 'online') { netSend({ t: 'cast', s: slot, x: Math.round(w.x), y: Math.round(w.y) }); return; }
+  if (NET.mode === 'online') { netSend({ t: 'cast', s: slot, x: Math.round(w.x), y: Math.round(w.y) }); predOff(); return; }
   cast(G.player, slot, w);
 }
 function cmdHalt() {
-  if (NET.mode === 'online') { netSend({ t: 'halt' }); G.player.target = null; return; }
+  if (NET.mode === 'online') { netSend({ t: 'halt' }); G.player.target = null; predHalt(); return; }
   var u = G.player; u.move = null; u.target = null; u.amove = null;
 }
 function order(sx, sy) {
@@ -480,4 +480,4 @@ function start() {
 }
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(start, start); else start();
 
-window.__PF = { get G() { return G; }, get NET() { return NET; }, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };
+window.__PF = { get G() { return G; }, get NET() { return NET; }, predDebug: predDebug, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };

@@ -121,16 +121,73 @@ function netSnap(S) {
   S.pp = {}; (S.p || []).forEach(function (a) { S.pp[a[0]] = a; });
   NETC.snaps.push(S);
 }
+/* Client-side prediction for your own hero's ground moves. A click starts the unit moving at once, using the same pathing as the server.
+   Each snapshot carries the server's position at the moment it applied your latest move (server time). We compare that with our own
+   prediction at the same moment and fold the difference in gradually (corr decays), so corrections never show as a snap. */
+var PRED = { on: false, u: null, move: null, hist: [], corr: { x: 0, y: 0 }, ackS: 0 };
+function predStart() {
+  var p = G.player; if (!p || p.dead) return false;
+  if (!PRED.on || !PRED.u) { PRED.on = true; PRED.u = { x: p.x, y: p.y, r: p.r, path: null, pathGoal: null, pathVer: -1, pathCd: 0, repath: false, scAt: null, facing: p.facing }; PRED.corr = { x: 0, y: 0 }; PRED.hist = []; }
+  return true;
+}
+function predOff() { PRED.on = false; PRED.u = null; PRED.move = null; PRED.hist = []; PRED.corr = { x: 0, y: 0 }; }
+function predMove(pt) { if (predStart()) PRED.move = freePoint({ x: pt.x, y: pt.y }, G.player.r); }
+function predHalt() { PRED.move = null; }
+function predHistAt(c) {
+  var h = PRED.hist; if (!h.length || c < h[0].t) return null;
+  for (var i = h.length - 1; i > 0; i--) if (h[i - 1].t <= c) { var a = h[i - 1], b = h[i], f = b.t > a.t ? (c - a.t) / (b.t - a.t) : 0; return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }; }
+  return h[0];
+}
+function predReconcile(a, tm) {
+  if (!PRED.on || !PRED.u) return;
+  var p = G.player;
+  if (p.dead) { predOff(); return; }
+  // 1. the server's position at the moment it applied our latest ground order, against our prediction at that same moment
+  var ackMs = a[21] || 0;
+  if (ackMs && ackMs / 1000 > PRED.ackS) {
+    PRED.ackS = ackMs / 1000;
+    var h = predHistAt(PRED.ackS - NETC.off);
+    if (h) {
+      var ex = a[22] - h.x, ey = a[23] - h.y;
+      PRED.u.x += ex; PRED.u.y += ey;
+      if (Math.hypot(ex, ey) <= 120) { PRED.corr.x -= ex; PRED.corr.y -= ey; } else { PRED.corr = { x: 0, y: 0 }; }
+    }
+  }
+  // 2. the server's position right now, against our prediction from the time the snapshot describes (a rough check for pushes and knockbacks)
+  var hs = predHistAt(tm - NETC.off);
+  if (hs && Math.hypot(a[3] - hs.x, a[4] - hs.y) > 150) { PRED.u.x = a[3]; PRED.u.y = a[4]; PRED.corr = { x: 0, y: 0 }; PRED.move = null; }
+}
+function predStep(raw) {
+  var p = G.player; if (!p || !PRED.on || !PRED.u) return;
+  var u = PRED.u;
+  if (u.pathCd > 0) u.pathCd -= raw;
+  if (PRED.move) {
+    var spd = moveSpeed(p);
+    if (spd > 0 && stepToward(u, PRED.move.x, PRED.move.y, spd * raw, 4)) PRED.move = null;
+  }
+  var now = performance.now() / 1000;
+  PRED.hist.push({ t: now, x: u.x, y: u.y });
+  while (PRED.hist.length > 2 && PRED.hist[0].t < now - 2) PRED.hist.shift();
+  var k = Math.exp(-raw * 12); PRED.corr.x *= k; PRED.corr.y *= k;
+  p.x = u.x + PRED.corr.x; p.y = u.y + PRED.corr.y;
+}
+/* test hook: the prediction state next to the server's latest position for our hero */
+function predDebug() {
+  var cur = NETC.cur, me = G && G.player, sv = cur && me && cur.pu[me.id];
+  return { on: PRED.on, pred: PRED.u ? { x: PRED.u.x, y: PRED.u.y } : null, corr: { x: PRED.corr.x, y: PRED.corr.y }, server: sv ? { x: sv[3], y: sv[4] } : null };
+}
 function netFrame(raw) {
   NETC.pingT -= raw; if (NETC.pingT <= 0 && NETC.ws) { NETC.pingT = 2; netSend({ t: 'ping', c: performance.now() }); }
   if (!G || !NETC.inMatch) return;
   var rt = performance.now() / 1000 + (NETC.off || 0) - interpDelay();
+  predStep(raw);
   while (NETC.snaps.length > 8) { NETC.cur = NETC.snaps.shift(); applySnap(NETC.cur); }
   while (NETC.snaps.length && NETC.snaps[0].tm <= rt) { NETC.cur = NETC.snaps.shift(); applySnap(NETC.cur); }
   var A = NETC.cur, B = NETC.snaps[0]; if (!A) return;
   var al = B ? clamp((rt - A.tm) / Math.max(0.001, B.tm - A.tm), 0, 1) : 0, since = Math.max(0, rt - A.tm);
   G.units.forEach(function (u) {
     if (u._hidden) return;
+    if (u === G.player && PRED.on) return;
     var a = A.pu[u.id]; if (!a) return; var b = B && B.pu[u.id];
     if (b && !u.dead && vlen(b[3] - a[3], b[4] - a[4]) < 400) { u.x = a[3] + (b[3] - a[3]) * al; u.y = a[4] + (b[4] - a[4]) * al; } else { u.x = a[3]; u.y = a[4]; }
     if (u.dash && u.dash.leap) u.dash.t = Math.min(u.dash.dur, u.dash.t0 + since);
@@ -172,6 +229,7 @@ function applySnap(S) {
     if (u.kind === 'hero') { if (u.team !== MYTEAM) u._hidden = true; return true; }
     delete NET.byId[u.id]; return false;
   });
+  if (G.player && S.pu[G.player.id]) predReconcile(S.pu[G.player.id], S.tm);
   var blk = false;
   S.s.forEach(function (a) { var s = NET.byId[a[0]]; if (!s) return; s.hp = a[1]; var d = !!a[2]; if (d !== s.dead) { s.dead = d; blk = true; } s.respawn = a[3] / 10; });
   if (blk) rebuildBlockers();

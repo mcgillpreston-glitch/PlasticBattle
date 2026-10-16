@@ -180,7 +180,9 @@ class Room {
         units.push([u.id, 0, u.team, R(u.x), R(u.y), R(u.hp), C.maxHp(u), u.facing, f, u.lvl, R(u.shield),
           w ? w.tgt.id : 0, w ? R(100 * w.t / w.dur) : 0, u.dash && u.dash.leap ? R(100 * u.dash.t / u.dash.dur) : 0,
           u.cone ? R(100 * Math.atan2(u.cone.dir.y, u.cone.dir.x)) : 0, u.cone ? R(u.cone.ab.range) : 0, u.cone ? R(100 * u.cone.ab.ang) : 0,
-          R(Math.max(0, u.respawn) * 10), R(100 * ((u.aug && u.aug.scale) || 0)), R(C.aaRange(u)), R(100 * C.aaCd(u))]);
+          R(Math.max(0, u.respawn) * 10), R(100 * ((u.aug && u.aug.scale) || 0)), R(C.aaRange(u)), R(100 * C.aaCd(u)),
+          // ground-order stamp for client prediction: server time (ms), position at that moment; 0 if none
+          u.ack ? R(u.ack[0] * 1000) : 0, u.ack ? R(u.ack[1]) : 0, u.ack ? R(u.ack[2]) : 0]);
       } else {
         let f = 0; if (u.dead) f |= 1; if (u.slowT > 0) f |= 4; if (u.burnT > 0) f |= 8;
         units.push([u.id, KCODE[u.type], u.team, R(u.x), R(u.y), R(u.hp), u.maxHp, u.facing, f]);
@@ -222,7 +224,7 @@ class Room {
       case 'move': {
         const x = num(m.x, -1000, 5000), y = num(m.y, -1000, 4000); if (x == null || y == null) return;
         const pt = C.freePoint({ x, y }, u.r);
-        u.target = null; u.move = pt; u.amove = m.a ? pt : null; break;
+        u.target = null; u.move = pt; u.amove = m.a ? pt : null; u.ack = [G.time, u.x, u.y]; break;
       }
       case 'atk': {
         const id = num(m.id, 1, 1e9);
@@ -237,7 +239,7 @@ class Room {
         u.aimPt = { x, y }; C.cast(u, m.s, { x, y }); break;
       }
       case 'aim': { const x = num(m.x, -1000, 5000), y = num(m.y, -1000, 4000); if (x != null && y != null) u.aimPt = { x, y }; break; }
-      case 'halt': u.move = null; u.target = null; u.amove = null; break;
+      case 'halt': u.move = null; u.target = null; u.amove = null; u.ack = [G.time, u.x, u.y]; break;
       case 'dbg_win': if (this.opts.debug) G.structs.filter(s => s.team !== u.team).sort((a, b) => a.order - b.order).forEach(s => C.kill(u, s)); break;
       case 'dbg_die': {
         // test only: an enemy hero and a turret hit this player hard enough to kill them, so the death recap can be checked end to end
