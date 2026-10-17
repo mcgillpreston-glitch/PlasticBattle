@@ -3424,6 +3424,18 @@ cv.addEventListener('pointermove', function (e) {
   if (G && e.pointerType === 'mouse') { hoverT = pickAt(s2w(mouse.x, mouse.y)); cv.className = drag && drag.moved ? 'pan' : aimSlot ? 'aim' : (hoverT || aMovePending) ? 'atk' : ''; }
 });
 cv.addEventListener('pointerleave', function () { mouse.inside = false; hoverT = null; });
+/* Edge scroll tracks the pointer at window level, so passing over a HUD panel does not stop it. When the cursor leaves the window across an
+   edge (common at the top in a normal browser window), the pan keeps going in that direction until the cursor comes back or the window loses focus. */
+var EDGE_BAND = 40;
+window.addEventListener('pointermove', function (e) { mouse.vx = e.clientX; mouse.vy = e.clientY; mouse.out = null; }, { passive: true });
+document.addEventListener('mouseout', function (e) {
+  if (e.relatedTarget || mouse.vx == null) return;
+  var ex = 0, ey = 0, W = window.innerWidth, H = window.innerHeight;
+  if (mouse.vx <= EDGE_BAND) ex = -1; else if (mouse.vx >= W - EDGE_BAND) ex = 1;
+  if (mouse.vy <= EDGE_BAND) ey = -1; else if (mouse.vy >= H - EDGE_BAND) ey = 1;
+  mouse.out = (ex || ey) ? { ex: ex, ey: ey } : null;
+});
+window.addEventListener('blur', function () { mouse.out = null; });
 cv.addEventListener('pointerup', function (e) {
   if (drag && !drag.moved) { var r = cv.getBoundingClientRect(); order(e.clientX - r.left, e.clientY - r.top); }
   drag = null;
@@ -3644,10 +3656,13 @@ function frame(now) {
     }
     // edge scroll: a mouse in the band along a screen edge pans the camera; the closer to the edge, the faster. Speed comes from the menu setting.
     var edgeV = opts.edge == null ? 50 : opts.edge;
-    if (edgeV > 0 && mouse.inside && !drag && menuEl.hidden && draftEl.hidden && ordersModal.hidden && swapModal.hidden) {
-      var band = 28, ex = 0, ey = 0;
-      if (mouse.x < band) ex = -(band - mouse.x) / band; else if (mouse.x > VW - band) ex = (mouse.x - (VW - band)) / band;
-      if (mouse.y < band) ey = -(band - mouse.y) / band; else if (mouse.y > VH - band) ey = (mouse.y - (VH - band)) / band;
+    if (edgeV > 0 && mouse.vx != null && !drag && menuEl.hidden && draftEl.hidden && ordersModal.hidden && swapModal.hidden && shopModal.hidden && sbEl.hidden) {
+      var band = EDGE_BAND, ex = 0, ey = 0, W = window.innerWidth, H = window.innerHeight;
+      if (mouse.out) { ex = mouse.out.ex; ey = mouse.out.ey; }
+      else {
+        if (mouse.vx < band) ex = -(band - mouse.vx) / band; else if (mouse.vx > W - band) ex = (mouse.vx - (W - band)) / band;
+        if (mouse.vy < band) ey = -(band - mouse.vy) / band; else if (mouse.vy > H - band) ey = (mouse.vy - (H - band)) / band;
+      }
       if (ex || ey) { cam.lock = false; var sp = edgeV * 8 * raw / cam.z; cam.x += ex * sp; cam.y += ey * sp; }
     }
     // keep the view on the painted sandbox: never show past its edges (centred when the view is wider than the map)
