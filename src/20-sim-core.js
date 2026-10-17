@@ -78,8 +78,7 @@ function spawnWave() {
       var fallen = G.structs.filter(function (s) { return s.team === 1 - team && s.lane === lane && s.kind === 'outpost' && s.dead; }).length;
       var extra = Math.min(RAMP.max, fallen * RAMP.perTurret);
       for (var x = 0; x < extra; x++) addMinion(team, 'rifle', lane);
-      if (G.wave % 3 === 0) addMinion(team, (G.wave / 3) % 3 === lane ? 'tank' : 'mortar', lane);
-      if (laneOpen(1 - team, lane)) addMinion(team, 'jeep', lane);
+      if (G.wave % 3 === 0) addMinion(team, 'mortar', lane);
     }
   });
 }
