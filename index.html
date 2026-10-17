@@ -717,7 +717,7 @@ function seeded(s) { var x = s || 1; return function () { x = (x * 1664525 + 101
 var MAP = { W: 3840, H: 2160 };
 var FOUNT = [{ x: 620, y: 1620 }, { x: 3350, y: 330 }];
 var LANE_DEF = [
-  { name: 'top', pts: [[620, 1621, 101], [459, 1423, 101], [344, 1194, 101], [436, 918, 101], [689, 574, 101], [942, 413, 101], [1194, 252, 101], [1470, 195, 101], [1837, 138, 101], [2182, 133, 101], [2526, 119, 101], [2894, 92, 101], [3123, 115, 101], [3261, 344, 101]] },
+  { name: 'top', pts: [[620, 1621, 101], [640, 1300, 101], [470, 1170, 101], [436, 918, 101], [689, 574, 101], [942, 413, 101], [1194, 252, 101], [1470, 195, 101], [1837, 138, 101], [2182, 133, 101], [2526, 119, 101], [2894, 92, 101], [3123, 115, 101], [3261, 344, 101]] },
   { name: 'mid', pts: [[620, 1621, 101], [827, 1469, 101], [1056, 1308, 101], [1286, 1148, 101], [1493, 1056, 101], [1745, 1033, 101], [2021, 987, 101], [2205, 895, 101], [2480, 769, 101], [2756, 666, 101], [3055, 505, 101], [3261, 344, 101]] },
   { name: 'bot', pts: [[620, 1621, 101], [758, 1745, 101], [1033, 1836, 101], [1378, 1882, 101], [1745, 1928, 101], [2113, 1940, 101], [2480, 1905, 101], [2756, 1813, 101], [2986, 1676, 101], [3215, 1584, 101], [3445, 1469, 101], [3583, 1240, 101], [3629, 1010, 101], [3491, 780, 101], [3353, 608, 101]] }
 ];
@@ -767,7 +767,8 @@ var FIELD_EXTRA = [
   { ax: 459, ay: 1423, bx: 689, by: 1607, r: 138 },
   { ax: 689, ay: 1607, bx: 758, by: 1905, r: 138 },
   { ax: 3261, ay: 344, bx: 3399, by: 252, r: 115 },
-  { ax: 3399, ay: 252, bx: 3445, by: 211, r: 138 }
+  { ax: 3399, ay: 252, bx: 3445, by: 211, r: 138 },
+  { ax: 440, ay: 1290, bx: 380, by: 1335, r: 70 } /* gap between the green tower and the green HQ: keeps the route round the tower open after the top-lane reroute */
 ];
 var LANES = LANE_DEF.map(function (d, li) {
   var pts = d.pts.map(function (p) { return { x: p[0], y: p[1], r: p[2] }; }), cum = [0];
@@ -879,7 +880,7 @@ STRUCT_DEF.push({ team: 1, lane: -1, kind: 'hq', order: 4, x: 3450, y: 200, t: 1
 /* fort towers that are not structures but still block movement */
 var PROPS = [];
 var PROP_C = [
-  { x: 330, y: 1270, r: 60, tag: 'tower' }, { x: 930, y: 1650, r: 60, tag: 'tower' }, { x: 720, y: 1910, r: 60, tag: 'tower' },
+  { x: 330, y: 1270, r: 45, tag: 'tower' }, { x: 930, y: 1650, r: 60, tag: 'tower' }, { x: 720, y: 1910, r: 60, tag: 'tower' },
   { x: 2960, y: 250, r: 60, tag: 'tower' }, { x: 3600, y: 550, r: 60, tag: 'tower' }, { x: 3130, y: 290, r: 45, tag: 'tower' }
 ];
 /* weeds: hiding spots on the painted grass tufts */
@@ -1254,8 +1255,7 @@ function spawnWave() {
       var fallen = G.structs.filter(function (s) { return s.team === 1 - team && s.lane === lane && s.kind === 'outpost' && s.dead; }).length;
       var extra = Math.min(RAMP.max, fallen * RAMP.perTurret);
       for (var x = 0; x < extra; x++) addMinion(team, 'rifle', lane);
-      if (G.wave % 3 === 0) addMinion(team, (G.wave / 3) % 3 === lane ? 'tank' : 'mortar', lane);
-      if (laneOpen(1 - team, lane)) addMinion(team, 'jeep', lane);
+      if (G.wave % 3 === 0) addMinion(team, 'mortar', lane);
     }
   });
 }
@@ -1951,7 +1951,10 @@ function updateUnit(u, dt) {
         u.wind.t += dt;
         if (u.wind.t >= u.wind.dur) { u.wind = null; attack(u, tgt); }
       }
-    } else { u.wind = null; if (spd > 0) { wantMove = true; stepToward(u, tgt.x, tgt.y, spd * dt, rng * 0.9); } }
+    } else { u.wind = null; if (spd > 0) { wantMove = true; var gx = tgt.x, gy = tgt.y;
+        /* Vehicles chasing a hero walk to the lane point beside it, not onto the hero: a hero at the field edge would otherwise pin them there. */
+        if (u.kind === 'minion' && (u.type === 'jeep' || u.type === 'tank') && tgt.kind === 'hero' && u.lane != null) { var hq0 = laneProj(tgt, u.lane); var lp = lanePt(hq0.t, clamp(hq0.off, -60, 60), u.lane); gx = lp.x; gy = lp.y; }
+        stepToward(u, gx, gy, spd * dt, rng * 0.9); } }
   } else if (u.move && spd > 0) {
     u.wind = null;
     wantMove = true;
@@ -1970,7 +1973,7 @@ function aaStyle(u) { return u.kind === 'hero' ? u.spec.aa : (u.type === 'melee'
 function windTime(u) {
   var s = aaStyle(u);
   if (u.kind === 'hero') return (s === 'melee' ? 0.12 : s === 'shell' ? 0.22 : Math.min(0.16, aaCd(u) * 0.35)) * 0.6;
-  return s === 'tank' ? 0.32 : s === 'melee' ? 0.14 : 0.2;
+  return s === 'tank' ? 0.2 : s === 'melee' ? 0.09 : 0.13;
 }
 function aimPoint(t) { return { x: t.x, y: t.isStruct ? t.y - 50 : t.y - unitH(t) * 0.45 }; }
 function attack(u, t) {
@@ -1988,7 +1991,7 @@ function attack(u, t) {
   if (style === 'melee') {
     anim(u, 'l');
     fx({ k: 'slash', x: ap.x, y: ap.y, t: 0, dur: 0.22, dir: u.facing, big: hero });
-    fx({ k: 'impact', x: ap.x, y: ap.y, t: 0, dur: 0.18, heavy: false, team: u.team });
+    fx({ k: 'impact', x: ap.x, y: ap.y, t: 0, dur: 0.3, heavy: false, team: u.team });
     sfx('melee', u.x, u.y);
     hitFeedback(u, t, u.facing);
     damage(u, t, dmg, { aa: 1, smul: u.smul });
@@ -2024,7 +2027,7 @@ function updateRounds(dt) {
     r.px = r.x; r.py = r.y;
     if (d <= s || r.life <= 0) {
       r.x = r.lx; r.y = r.ly;
-      fx({ k: 'impact', x: r.x, y: r.y, t: 0, dur: r.heavy ? 0.3 : 0.18, heavy: r.heavy, team: r.team });
+      fx({ k: 'impact', x: r.x, y: r.y, t: 0, dur: r.heavy ? 0.42 : 0.3, heavy: r.heavy, team: r.team });
       if (r.heavy) { fx({ k: 'boom', x: r.x, y: r.y + 30, r: 46, t: 0, dur: 0.35 }); sfx('boom', r.x, r.y); }
       if (alive) {
         hitFeedback(r.owner, r.tgt, dx >= 0 ? 1 : -1);
@@ -2215,19 +2218,23 @@ function updateBarrage(dt) {
     if (b.acc <= 0) { b.acc = 0.22; var a = rnd(0, Math.PI * 2), rr = Math.random() * G.barrage.r; fx({ k: 'splash', x: b.x + Math.cos(a) * rr, y: b.y + Math.sin(a) * rr * 0.6, t: 0, dur: 0.5 }); sfx('splash', b.x, b.y); }
   });
 }
+/* Units are solid: no two living, non-dashing units may overlap. Pushes split by mass (heroes are heavier than minions), and the pass repeats so a crowd settles instead of trading overlaps. */
+function unitMass(u) { return u.kind === 'hero' ? 1.6 : u.type === 'tank' ? 2.4 : u.type === 'jeep' ? 1.3 : 1; }
 function separate(dt) {
   var arr = G.units;
-  for (var i = 0; i < arr.length; i++) {
-    var a = arr[i]; if (a.dead || a.dash) continue;
-    for (var j = i + 1; j < arr.length; j++) {
-      var b = arr[j]; if (b.dead || b.dash) continue;
-      var dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy, m = (a.r + b.r) * 0.8;
-      if (d2 < m * m && d2 > 0.01) {
-        var d = Math.sqrt(d2), push = (m - d), nx = dx / d, ny = dy / d;
-        var wa = 0.5, wb = 0.5;
-        if (a.kind === 'hero' && b.kind === 'minion') { wa = 0.05; wb = 0.95; }
-        else if (b.kind === 'hero' && a.kind === 'minion') { wa = 0.95; wb = 0.05; }
-        a.x -= nx * push * wa; a.y -= ny * push * wa; b.x += nx * push * wb; b.y += ny * push * wb;
+  for (var pass = 0; pass < 3; pass++) {
+    for (var i = 0; i < arr.length; i++) {
+      var a = arr[i]; if (a.dead || a.dash) continue;
+      for (var j = i + 1; j < arr.length; j++) {
+        var b = arr[j]; if (b.dead || b.dash) continue;
+        var dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy, m = a.r + b.r;
+        if (d2 < m * m) {
+          var d = Math.sqrt(d2), push = m - d, nx, ny;
+          if (d2 > 0.01) { nx = dx / d; ny = dy / d; } else { var ang = (a.id * 2.399) % (Math.PI * 2); nx = Math.cos(ang); ny = Math.sin(ang); }
+          var ma = unitMass(a), mb = unitMass(b), tot = ma + mb;
+          a.x -= nx * push * (mb / tot); a.y -= ny * push * (mb / tot);
+          b.x += nx * push * (ma / tot); b.y += ny * push * (ma / tot);
+        }
       }
     }
   }
@@ -2791,11 +2798,12 @@ function drawAimLines() {
 function drawFx(f) {
   var p = f.t / f.dur;
   if (f.k === 'impact') {
-    var s = f.heavy ? 1.8 : 1; ctx.save(); ctx.translate(f.x, f.y); ctx.globalAlpha = 1 - p;
+    var s = (f.heavy ? 2.4 : 1) * 2.1; ctx.save(); ctx.translate(f.x, f.y); ctx.globalAlpha = 1 - p * p;
     ctx.fillStyle = 'rgba(227,203,147,0.7)'; ell(ctx, 0, 6 + p * 4, (6 + 18 * p) * s, (4 + 10 * p) * s); ctx.fill();
     ctx.strokeStyle = '#FFF4C8'; ctx.lineWidth = 2 * s;
     for (var i = 0; i < 5; i++) { var a = i * Math.PI * 2 / 5 + 0.3 + f.x % 1, r0 = 3 * s, r1 = (8 + 14 * p) * s; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); ctx.lineTo(Math.cos(a) * r1, Math.sin(a) * r1 * 0.7); ctx.stroke(); }
-    ctx.fillStyle = '#FFFBE6'; ell(ctx, 0, 0, 5 * s * (1 - p) + 1, 5 * s * (1 - p) + 1); ctx.fill(); ctx.restore(); ctx.globalAlpha = 1; return;
+    ctx.strokeStyle = 'rgba(255,250,220,0.95)'; ctx.lineWidth = 4; ell(ctx, 0, 0, (6 + 26 * p) * s, (4 + 14 * p) * s); ctx.stroke();
+    ctx.fillStyle = '#FFFBE6'; ell(ctx, 0, 0, 6 * s * (1 - p) + 1.5, 6 * s * (1 - p) + 1.5); ctx.fill(); ctx.restore(); ctx.globalAlpha = 1; return;
   }
   if (f.k === 'hitmark') {
     var kill = f.kill, sc = kill ? 1.5 : 1, g0 = (6 + p * 4) * sc, g1 = g0 + 10 * sc;
@@ -3347,7 +3355,7 @@ cv.addEventListener('pointerdown', function (e) {
 });
 cv.addEventListener('pointermove', function (e) {
   var r = cv.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; mouse.inside = true;
-  if (drag) { var dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 12) { drag.moved = true; cam.lock = false; cam.x = drag.cx - dx / cam.z; cam.y = drag.cy - dy / cam.z; } }
+  if (drag) { var dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 12) { drag.moved = true; cam.lock = false; cam.vx = cam.vy = 0; cam.x = drag.cx - dx / cam.z; cam.y = drag.cy - dy / cam.z; } }
   if (G && e.pointerType === 'mouse') { hoverT = pickAt(s2w(mouse.x, mouse.y)); cv.className = drag && drag.moved ? 'pan' : aimSlot ? 'aim' : (hoverT || aMovePending) ? 'atk' : ''; }
 });
 cv.addEventListener('pointerleave', function () { mouse.inside = false; hoverT = null; });
@@ -3564,8 +3572,10 @@ function frame(now) {
   updateVisuals(raw);
   if (G && G.player) {
     if (cam.lock) {
-      var dead = G.player.dead, tgt = dead ? (G.death && G.player.respawn > 1.6 ? G.death : fountain(MYTEAM)) : G.player, k = Math.min(1, raw * (dead ? 3.5 : 14));
-      cam.x += (tgt.x - cam.x) * k; cam.y += (tgt.y - cam.y) * k;
+      var dead = G.player.dead, tgt = dead ? (G.death && G.player.respawn > 1.6 ? G.death : fountain(MYTEAM)) : G.player;
+      /* critically damped spring: the camera eases into motion and out of it, with no overshoot, so steps in the player's position do not show as jerks */
+      var om = dead ? 4 : 11, dtc = Math.min(raw, 0.05), fx = (tgt.x - cam.x) * om * om - 2 * om * (cam.vx || 0), fy = (tgt.y - cam.y) * om * om - 2 * om * (cam.vy || 0);
+      cam.vx = (cam.vx || 0) + fx * dtc; cam.vy = (cam.vy || 0) + fy * dtc; cam.x += cam.vx * dtc; cam.y += cam.vy * dtc;
     }
     // edge scroll: a mouse in the band along a screen edge pans the camera; the closer to the edge, the faster. Speed comes from the menu setting.
     var edgeV = opts.edge == null ? 50 : opts.edge;

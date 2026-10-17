@@ -237,7 +237,7 @@ cv.addEventListener('pointerdown', function (e) {
 });
 cv.addEventListener('pointermove', function (e) {
   var r = cv.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; mouse.inside = true;
-  if (drag) { var dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 12) { drag.moved = true; cam.lock = false; cam.x = drag.cx - dx / cam.z; cam.y = drag.cy - dy / cam.z; } }
+  if (drag) { var dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 12) { drag.moved = true; cam.lock = false; cam.vx = cam.vy = 0; cam.x = drag.cx - dx / cam.z; cam.y = drag.cy - dy / cam.z; } }
   if (G && e.pointerType === 'mouse') { hoverT = pickAt(s2w(mouse.x, mouse.y)); cv.className = drag && drag.moved ? 'pan' : aimSlot ? 'aim' : (hoverT || aMovePending) ? 'atk' : ''; }
 });
 cv.addEventListener('pointerleave', function () { mouse.inside = false; hoverT = null; });
@@ -454,8 +454,10 @@ function frame(now) {
   updateVisuals(raw);
   if (G && G.player) {
     if (cam.lock) {
-      var dead = G.player.dead, tgt = dead ? (G.death && G.player.respawn > 1.6 ? G.death : fountain(MYTEAM)) : G.player, k = Math.min(1, raw * (dead ? 3.5 : 14));
-      cam.x += (tgt.x - cam.x) * k; cam.y += (tgt.y - cam.y) * k;
+      var dead = G.player.dead, tgt = dead ? (G.death && G.player.respawn > 1.6 ? G.death : fountain(MYTEAM)) : G.player;
+      /* critically damped spring: the camera eases into motion and out of it, with no overshoot, so steps in the player's position do not show as jerks */
+      var om = dead ? 4 : 11, dtc = Math.min(raw, 0.05), fx = (tgt.x - cam.x) * om * om - 2 * om * (cam.vx || 0), fy = (tgt.y - cam.y) * om * om - 2 * om * (cam.vy || 0);
+      cam.vx = (cam.vx || 0) + fx * dtc; cam.vy = (cam.vy || 0) + fy * dtc; cam.x += cam.vx * dtc; cam.y += cam.vy * dtc;
     }
     // edge scroll: a mouse in the band along a screen edge pans the camera; the closer to the edge, the faster. Speed comes from the menu setting.
     var edgeV = opts.edge == null ? 50 : opts.edge;
