@@ -580,7 +580,7 @@ function cast(u, slot, aim) {
     var main = 'QWER'.indexOf(slot) >= 0;
     if (main) fx({ k: 'callout', u: u, txt: ab.n.toUpperCase() + (slot === 'R' ? '!' : ''), t: 0, dur: slot === 'R' ? 1.3 : 0.95, ult: slot === 'R' });
     fx({ k: 'castring', x: u.x, y: u.y, t: 0, dur: slot === 'R' ? 0.55 : 0.35, c: TEAMC[u.team].hi, ult: slot === 'R' });
-    anim(u, 'c');
+    anim(u, 'c' + slot);
     if (slot === 'R') shakeAt(u.x, u.y, 4);
   }
   var full = ab.cd * (slot === 'D' || slot === 'F' ? 1 : cdMul(u, slot));

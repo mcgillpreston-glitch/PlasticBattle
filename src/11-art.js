@@ -156,13 +156,17 @@ function paintGear(ctx, key, C) {
 /* Illustrated soldiers: assets/heroes/<key>.png (green plastic) and assets/heroes/tan/<key>.png (tan plastic), likewise assets/minions/.
    If a tan illustration is missing, the green one is recoloured to tan plastic at load. A sprite is drawn with its base plate at the
    unit's feet; HSCALE sets how tall each figure stands relative to a standing soldier. */
-var HERO_ART = {}, HSCALE = { sniper: 0.5, para: 1.3, mortar: 0.95, kneeler: 0.9, m_mortar: 0.9, m_tank: 1, m_jeep: 1 };
+var HERO_ART = {}, HERO_ANIM = {}, HSCALE = { sniper: 0.5, para: 1.3, mortar: 0.95, kneeler: 0.9, m_mortar: 0.9, m_tank: 1, m_jeep: 1 };
 function loadHeroArt(img) {
   function pair(key, base) {
     img(base + '.png', function (im) { if (im) { var a = HERO_ART[key] || (HERO_ART[key] = { img: null, tan: null }); a.img = im; } });
     img(base.replace(/\/([^\/]*)$/, '/tan/$1') + '.png', function (im) { if (im) { var a = HERO_ART[key] || (HERO_ART[key] = { img: null, tan: null }); a.tan = im; } });
   }
   HEROES.forEach(function (hs) { pair(hs.key, 'assets/heroes/' + hs.key); });
+  var AF = typeof ANIM_FRAMES === 'object' ? ANIM_FRAMES : {};
+  Object.keys(AF).forEach(function (key) { Object.keys(AF[key]).forEach(function (slot) { for (var n = 1; n <= AF[key][slot]; n++) (function (n) {
+    img('assets/heroes/anim/' + key + '_' + slot + '_' + n + '.png', function (im) { if (!im) return; var h = HERO_ANIM[key] || (HERO_ANIM[key] = {}), f = h[slot] || (h[slot] = []); f[n - 1] = { img: im, tan: null }; });
+  })(n); }); });
   ['melee', 'rifle', 'mortar', 'tank', 'jeep'].forEach(function (k) { pair('m_' + k, 'assets/minions/' + k); });
 }
 function tanify(im) {
@@ -190,6 +194,29 @@ function heroArt(key, team) {
   return a.img || a.tan;
 }
 var spriteCache = {};
+/* Ability cast frames: frame 1 (wind-up) for CAST_WIND seconds, then frame 2 (release) until CAST_HOLD, or for as long as a
+   channel or dash lasts; then back to the idle figure. Frames are cut at the idle image's pixel scale (tools/prep-anim.py),
+   so they are drawn at that scale, bottom-centred on the feet, which keeps the base plate still. */
+var CAST_WIND = 0.09, CAST_HOLD = 0.42;
+function castFrame(u) {
+  var c = u.castA; if (!c || u.dead) return null;
+  var fr = HERO_ANIM[u.pose] && HERO_ANIM[u.pose][c.slot]; if (!fr) return null;
+  var n = c.t < CAST_WIND && fr[0] ? 0 : (fr[1] ? 1 : 0);
+  return fr[n] ? { key: u.pose, slot: c.slot, n: n, f: fr[n] } : null;
+}
+function animSprite(cf, team, h, flip, flash) {
+  var id = 'A|' + cf.key + cf.slot + cf.n + '|' + team + '|' + h + '|' + (flip ? 1 : 0) + (flash ? 'f' : '');
+  if (spriteCache[id]) return spriteCache[id];
+  var idle = heroArt(cf.key, team); if (!idle) return null;
+  var art = cf.f.img; if (team === 1) { if (!cf.f.tan) cf.f.tan = tanify(cf.f.img); art = cf.f.tan; }
+  var S = 2.5, k = h * (HSCALE[cf.key] || 1) / idle.height, w = art.width * k, dh = art.height * k, cv = document.createElement('canvas');
+  cv.width = Math.ceil(w * S); cv.height = Math.ceil(dh * S);
+  var c = cv.getContext('2d'); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+  if (flip) { c.translate(cv.width, 0); c.scale(-1, 1); }
+  c.drawImage(art, 0, 0, cv.width, cv.height);
+  if (flash) { c.globalCompositeOperation = 'source-in'; c.fillStyle = '#FFFFFF'; c.fillRect(0, 0, cv.width, cv.height); }
+  return (spriteCache[id] = { cv: cv, w: w, h: dh, ox: -w / 2, oy: -dh + 6 });
+}
 function sprite(key, team, h, flip, flash) {
   var id = key + '|' + team + '|' + h + '|' + (flip ? 1 : 0) + (flash ? 'f' : '');
   if (spriteCache[id]) return spriteCache[id];

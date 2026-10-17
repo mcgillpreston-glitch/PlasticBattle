@@ -98,7 +98,7 @@ function present(e) {
       if (e[2] === 'f') { u.fireT = 0.14; u.recoilT = 0.12; }
       else if (e[2] === 'F') { u.fireT = 0.2; u.recoilT = 0.2; }
       else if (e[2] === 'l') u.lungeT = 0.16;
-      else if (e[2] === 'c') u.fireT = Math.max(u.fireT || 0, 0.16);
+      else if (e[2].charAt(0) === 'c') { u.fireT = Math.max(u.fireT || 0, 0.16); if (e[2].length > 1) u.castA = { slot: e[2].charAt(1), t: 0 }; }
       else if (e[2] === 'r') u.recoilT = 0.06;
       break;
     case 'h':
@@ -141,6 +141,7 @@ function updateVisuals(dt) {
 function visUnit(u, dt) {
   if (u.flashT > 0) u.flashT -= dt;
   if (u.txtT > 0) u.txtT -= dt;
+  if (u.castA) { u.castA.t += dt; if (u.castA.t > CAST_HOLD && !u.chan && !u.dash) u.castA = null; }
   // health ghost: the fraction the bar showed before the latest hits; holds, then drains down to the real value
   var mh = u.kind === 'hero' ? maxHp(u) : u.maxHp, hf = mh ? u.hp / mh : 0;
   if (u.ghost == null || hf > u.ghost || u.dead) u.ghost = hf;

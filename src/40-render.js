@@ -479,9 +479,9 @@ function drawUnit(u) {
   }
   if (veh) drawVehicle(u);
   else {
-    var sp = sprite(u.pose, u.team, h, u.facing < 0);
+    var cf = u.kind === 'hero' ? castFrame(u) : null, sp = (cf && animSprite(cf, u.team, h, u.facing < 0)) || sprite(u.pose, u.team, h, u.facing < 0);
     ctx.drawImage(sp.cv, sp.ox, sp.oy, sp.w, sp.h);
-    if (u.flashT > 0 && !u.dead) { var fs = sprite(u.pose, u.team, h, u.facing < 0, true); ctx.globalAlpha = alpha * (u.flashT / 0.18) * 0.85; ctx.drawImage(fs.cv, sp.ox, sp.oy, sp.w, sp.h); ctx.globalAlpha = alpha; }
+    if (u.flashT > 0 && !u.dead) { var fs = (cf && animSprite(cf, u.team, h, u.facing < 0, true)) || sprite(u.pose, u.team, h, u.facing < 0, true); ctx.globalAlpha = alpha * (u.flashT / 0.18) * 0.85; ctx.drawImage(fs.cv, sp.ox, sp.oy, sp.w, sp.h); ctx.globalAlpha = alpha; }
   }
   if (u.shield > 0 && !u.dead) { ctx.strokeStyle = 'rgba(214,203,170,0.7)'; ctx.lineWidth = 3; ell(ctx, 0, -h * 0.45, 40, h * 0.6); ctx.stroke(); }
   if (u.burnT > 0 && !u.dead && Math.random() < 0.4) addFx({ k: 'flame', x: u.x + rnd(-12, 12), y: u.y - rnd(10, 60), t: 0, dur: 0.3 });
