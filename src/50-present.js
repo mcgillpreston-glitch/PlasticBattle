@@ -29,7 +29,17 @@ function enterMatch() {
 }
 
 function addFx(o) { if (G && G.fx.length < 700) G.fx.push(o); }
-function floatText(x, y, txt, color) { if (!G || G.texts.length > 80) return; G.texts.push({ x: x + rnd(-10, 10), y: y, txt: String(txt), color: color, t: 0 }); }
+/* Damage and heal numbers. kind: 'in' (to you, red, biggest), 'out' (by you, amber), 'other' (another hero involved, small and dim), 'heal'.
+   Numbers on the same unit stack upward so a burst of hits stays readable instead of piling on one spot. */
+function floatText(x, y, txt, color, kind, u) {
+  if (!G || G.texts.length > 90) return;
+  // third-party hits on the same unit within a third of a second merge into one running number
+  if (kind === 'other' && u && u.txtT > 0) { for (var i = G.texts.length - 1; i >= 0; i--) { var o = G.texts[i]; if (o.uid === u.id && o.kind === 'other' && o.t < 0.35) { o.txt = String((+o.txt || 0) + (+txt || 0)); o.t = Math.min(o.t, 0.1); return; } } }
+  var lift = 0;
+  if (u) { if (u.txtT > 0) { u.txtN = (u.txtN || 0) + 1; } else u.txtN = 0; u.txtT = 0.35; lift = Math.min(4, u.txtN) * 16; }
+  var size = kind === 'in' ? 24 : kind === 'out' ? 20 : kind === 'heal' ? 18 : 14;
+  G.texts.push({ x: x + rnd(-8, 8), y: y - lift, txt: String(txt), color: color, t: 0, size: size, kind: kind || 'out', vx: rnd(-14, 14), uid: u ? u.id : 0 });
+}
 function chipsFx(x, y, team, n, power) {
   for (var i = 0; i < n; i++) { var a = rnd(0, Math.PI * 2), s = rnd(80, 260) * power; addFx({ k: 'chip', x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 120, t: 0, dur: rnd(0.4, 0.9), c: TEAMC[team].c2, rot: rnd(0, 6) }); }
 }
@@ -57,13 +67,15 @@ function present(e) {
     case 'shake': localShake(e[1], e[2], e[3]); break;
     case 'dmg':
       u = unitById(e[1]); if (!u || u._hidden) break;
-      var amt = e[3]; u.flashT = 0.08;
+      var amt = e[3]; if (!(amt > 0)) break; u.flashT = 0.18; u.ghostHold = 0.4;
       if (amt > 8 && Math.random() < 0.7) chipsFx(u.x, u.isStruct ? u.y - 40 : u.y - unitH(u) * 0.45, u.team, u.isStruct ? 2 : 3, u.isStruct ? 0.5 : 0.6);
+      var src = unitById(e[2]), ty = u.y - (u.isStruct ? 120 : unitH(u)) - 12;
       if (isMe(e[1])) {
-        G.hurtT = Math.max(G.hurtT, 0.35); playSfx('hit', u.x, u.y); floatText(u.x, u.y - unitH(u) - 10, amt, '#FF5A4E');
-        var att = unitById(e[2]); if (att) { G.hitDirs = (G.hitDirs || []).filter(function (h) { return h.src !== att.id; }); G.hitDirs.push({ src: att.id, ang: Math.atan2(att.y - u.y, att.x - u.x), t: 0.9 }); }
+        G.hurtT = Math.max(G.hurtT, 0.35); playSfx('hit', u.x, u.y); floatText(u.x, ty, '-' + amt, '#FF5A4E', 'in', u);
+        if (src) { G.hitDirs = (G.hitDirs || []).filter(function (h) { return h.src !== src.id; }); G.hitDirs.push({ src: src.id, ang: Math.atan2(src.y - u.y, src.x - u.x), t: 0.9 }); }
       }
-      else if (isMe(e[2])) { playSfx('hit', u.x, u.y); floatText(u.x, u.y - (u.isStruct ? 120 : unitH(u)) - 10, amt, '#FFFFFF'); }
+      else if (isMe(e[2])) { playSfx('hit', u.x, u.y); floatText(u.x, ty, amt, amt >= 120 ? '#FFD24A' : '#FFFFFF', 'out', u); }
+      else if (u.kind === 'hero' && src && src.kind === 'hero' && amt >= 15) floatText(u.x, ty, amt, u.team === MYTEAM ? '#FFB0A6' : '#E8E8E8', 'other', u);
       if (u.isStruct && u.team === MYTEAM && !u.dead) alertStruct(u);
       break;
     case 'kill':
@@ -80,7 +92,7 @@ function present(e) {
     case 'sprinkler': showAlert('SPRINKLER ACTIVATED \u00b7 CLEAR THE CENTRE', 'bad'); break;
     case 'kia': if (isMe(e[1])) { showAlert('UNIT LOST', 'bad'); G.hurtT = 1.2; G.hitDirs = []; showDeath(e[2], unitById(e[4]), e[5]); } break;
     case 'lvl': if (isMe(e[1])) { showAlert('PROMOTED TO LEVEL ' + e[2] + (ORDER_LEVELS.indexOf(e[2]) >= 0 ? ' · FIELD ORDERS AT BASE' : ''), 'good'); playSfx('ui'); } break;
-    case 'heal': if (isMe(e[1])) { u = unitById(e[1]); if (u) floatText(u.x, u.y - 100, '+' + e[2], '#B8E07A'); playSfx('ui'); } break;
+    case 'heal': if (isMe(e[1])) { u = unitById(e[1]); if (u) floatText(u.x, u.y - 100, '+' + e[2], '#B8E07A', 'heal', u); playSfx('ui'); } break;
     case 'a':
       u = unitById(e[1]); if (!u) break;
       if (e[2] === 'f') { u.fireT = 0.14; u.recoilT = 0.12; }
@@ -117,16 +129,23 @@ function updateVisuals(dt) {
   G.feed.forEach(function (f) { f.t -= dt; });
   if (G.feed.length && G.feed[G.feed.length - 1].t <= 0) { G.feed = G.feed.filter(function (f) { return f.t > 0; }); renderFeed(); }
   G.fx = G.fx.filter(function (f) { f.t += dt; if (f.k === 'chip') { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 520 * dt; } return f.t < f.dur; });
-  G.texts = G.texts.filter(function (t) { t.t += dt; t.y -= 40 * dt; return t.t < 0.9; });
+  G.texts = G.texts.filter(function (t) { t.t += dt; t.y -= (t.t < 0.25 ? 110 : 30) * dt; t.x += (t.vx || 0) * dt; return t.t < 1.1; });
   G.units.forEach(function (u) { visUnit(u, dt); });
   G.structs.forEach(function (s) {
     if (s.flashT > 0) s.flashT -= dt;
     if (s.recoilT > 0) s.recoilT -= dt;
+    var sf = s.hp / s.maxHp; if (s.ghost == null || sf > s.ghost || s.dead) s.ghost = sf; else if (s.ghostHold > 0) s.ghostHold -= dt; else s.ghost = Math.max(sf, s.ghost - 1.2 * dt);
     if (s.dead && Math.random() < dt * 3) addFx({ k: 'smoke', x: s.x + rnd(-30, 30), y: s.y - rnd(10, 60), t: 0, dur: 1.4, big: 1 });
   });
 }
 function visUnit(u, dt) {
   if (u.flashT > 0) u.flashT -= dt;
+  if (u.txtT > 0) u.txtT -= dt;
+  // health ghost: the fraction the bar showed before the latest hits; holds, then drains down to the real value
+  var mh = u.kind === 'hero' ? maxHp(u) : u.maxHp, hf = mh ? u.hp / mh : 0;
+  if (u.ghost == null || hf > u.ghost || u.dead) u.ghost = hf;
+  else if (u.ghostHold > 0) u.ghostHold -= dt;
+  else u.ghost = Math.max(hf, u.ghost - 1.2 * dt);
   if (u.recoilT > 0) u.recoilT -= dt;
   if (u.fireT > 0) u.fireT -= dt;
   if (u.stagT > 0) u.stagT -= dt;

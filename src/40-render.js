@@ -161,12 +161,12 @@ function drawScene(shx, shy, zoomHint) {
 function drawOverlays(shx, shy) {
   ctx.save();
   camXf(shx, shy);
-  G.structs.forEach(function (s) { if (!s.dead) bar(s.x, s.y - structTop(s), s.kind === 'hq' ? 170 : 110, 9, s.hp / s.maxHp, s.team, targetable(s) ? null : 'locked'); });
+  G.structs.forEach(function (s) { if (!s.dead) bar(s.x, s.y - structTop(s), s.kind === 'hq' ? 170 : 110, 9, s.hp / s.maxHp, s.team, targetable(s) ? null : 'locked', 0, 0, s.ghost); });
   G.units.forEach(function (u) {
     if (u.dead || !visibleTo(u, MYTEAM)) return;
     var hh = unitH(u);
     if (u.kind === 'hero') {
-      bar(u.x, u.y - hh - 16, 84, 8, u.hp / maxHp(u), u.team, null, u.shield / maxHp(u), u.lvl);
+      bar(u.x, u.y - hh - 17, 96, 9, u.hp / maxHp(u), u.team, null, u.shield / maxHp(u), u.lvl, u.ghost);
       var human = !u.bot, tc = u.team === MYTEAM ? '110,200,120' : '235,90,70';
       if (human && !u.isPlayer) {
         ctx.setLineDash([]); ctx.fillStyle = 'rgba(' + tc + ',0.28)'; ell(ctx, u.x, u.y + 2, 46, 18); ctx.fill();
@@ -183,14 +183,22 @@ function drawOverlays(shx, shy) {
         ctx.font = '400 11px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = u.team === MYTEAM ? '#CFF5D3' : '#FFD6D2'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)';
         ctx.strokeText(nm, u.x, u.y - hh - 23); ctx.fillText(nm, u.x, u.y - hh - 23);
       }
-    } else bar(u.x, u.y - hh - 10, 40, 4, u.hp / u.maxHp, u.team);
+    } else bar(u.x, u.y - hh - 10, 44, 5, u.hp / u.maxHp, u.team, null, 0, 0, u.ghost);
   });
   if (G.player && !G.player.dead) {
     if (G.player.target) drawBracket(G.player.target, '#D9532F', 3, true);
     if (hoverT && hoverT !== G.player.target && !hoverT.dead) drawBracket(hoverT, 'rgba(214,203,170,0.8)', 2, false);
   }
   G.fx.forEach(function (f) { if (f.k === 'callout') drawFx(f); });
-  G.texts.forEach(function (t) { var pop = t.t < 0.1 ? 1.5 - t.t * 5 : 1; ctx.save(); ctx.translate(t.x, t.y); ctx.scale(pop, pop); ctx.globalAlpha = t.t < 0.6 ? 1 : 1 - (t.t - 0.6) / 0.3; ctx.font = '400 ' + (t.big ? 24 : 17) + 'px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(t.txt, 0, 0); ctx.fillStyle = t.color; ctx.fillText(t.txt, 0, 0); ctx.restore(); ctx.globalAlpha = 1; });
+  G.texts.forEach(function (t) {
+    var pop = t.t < 0.12 ? 1.6 - t.t * 5 : 1, a = t.t < 0.7 ? 1 : 1 - (t.t - 0.7) / 0.4, sz = t.size || 17;
+    ctx.save(); ctx.translate(t.x, t.y); ctx.scale(pop, pop); ctx.globalAlpha = a;
+    ctx.font = '400 ' + sz + 'px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+    ctx.lineWidth = t.kind === 'other' ? 3 : 5; ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.strokeText(t.txt, 0, 0);
+    if (t.kind === 'in') { ctx.shadowColor = 'rgba(255,60,40,0.9)'; ctx.shadowBlur = 10; }
+    else if (t.kind === 'out' && sz >= 20) { ctx.shadowColor = 'rgba(255,220,120,0.7)'; ctx.shadowBlur = 8; }
+    ctx.fillStyle = t.color; ctx.fillText(t.txt, 0, 0); ctx.restore(); ctx.globalAlpha = 1;
+  });
   ctx.restore();
   drawEdgeMarkers();
 }
@@ -324,14 +332,16 @@ function postProcess() {
     ctx.lineCap = 'butt';
   }
 }
-function bar(x, y, w, h, frac, team, locked, sh, lvl) {
-  frac = clamp(frac, 0, 1);
-  ctx.fillStyle = 'rgba(8,10,12,0.8)'; ctx.fillRect(x - w / 2 - 1, y - 1, w + 2, h + 2);
-  ctx.fillStyle = team === MYTEAM ? '#5BD66B' : '#F0453A'; ctx.fillRect(x - w / 2, y, w * frac, h);
-  if (sh > 0) { ctx.fillStyle = 'rgba(120,200,255,0.9)'; ctx.fillRect(x - w / 2 + w * frac, y, Math.min(w * (1 - frac), w * sh), h); }
-  if (locked) { ctx.fillStyle = 'rgba(8,10,12,0.5)'; ctx.fillRect(x - w / 2, y, w, h); }
-  for (var k = 1; k < 4 && h >= 6; k++) { ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x - w / 2 + w * k / 4 - 0.5, y, 1, h); }
-  if (lvl) { ctx.fillStyle = team === MYTEAM ? '#5BD66B' : '#F0453A'; ctx.fillRect(x - w / 2 - 20, y - 3, 17, h + 6); ctx.fillStyle = '#0A0C0E'; ctx.font = '400 11px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(lvl, x - w / 2 - 11.5, y + h + 1); }
+function bar(x, y, w, h, frac, team, locked, sh, lvl, ghost) {
+  frac = clamp(frac, 0, 1); ghost = ghost == null ? frac : clamp(ghost, 0, 1);
+  var x0 = x - w / 2, rr = Math.min(4, h / 2), col = team === MYTEAM ? '#5BD66B' : '#F0453A';
+  ctx.fillStyle = 'rgba(6,8,10,0.82)'; rrect(ctx, x0 - 1.5, y - 1.5, w + 3, h + 3, rr + 1.5); ctx.fill();
+  if (ghost > frac) { ctx.fillStyle = 'rgba(255,235,220,0.85)'; rrect(ctx, x0, y, w * ghost, h, rr); ctx.fill(); }
+  if (frac > 0) { ctx.fillStyle = col; rrect(ctx, x0, y, Math.max(w * frac, rr * 2), h, rr); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.22)'; rrect(ctx, x0, y, Math.max(w * frac, rr * 2), h * 0.45, rr); ctx.fill(); }
+  if (sh > 0) { ctx.fillStyle = 'rgba(120,200,255,0.9)'; ctx.fillRect(x0 + w * frac, y, Math.min(w * (1 - frac), w * sh), h); }
+  if (locked) { ctx.fillStyle = 'rgba(8,10,12,0.5)'; rrect(ctx, x0, y, w, h, rr); ctx.fill(); }
+  for (var k = 1; k < 4 && h >= 6; k++) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(x0 + w * k / 4 - 0.5, y, 1, h); }
+  if (lvl) { ctx.fillStyle = col; rrect(ctx, x0 - 22, y - 3.5, 18, h + 7, 4); ctx.fill(); ctx.fillStyle = '#0A0C0E'; ctx.font = '400 11px Russo One, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(lvl, x0 - 13, y + h + 0.5); }
 }
 function drawBracket(t, color, lw, spin) {
   var w, h, cx = t.x, cy;
@@ -383,7 +393,7 @@ function drawStruct(s) {
   } else {
     // the painted fort is the HQ: smoke, scorch and a flag when alive; rubble tint and a toppled flag when it falls
     if (!dead) {
-      if (s.flashT > 0) { ctx.globalAlpha = s.flashT / 0.08 * 0.35; ctx.fillStyle = '#fff'; ell(ctx, 0, -40, 130, 90); ctx.fill(); ctx.globalAlpha = 1; }
+      if (s.flashT > 0) { ctx.globalAlpha = s.flashT / 0.18 * 0.35; ctx.fillStyle = '#fff'; ell(ctx, 0, -40, 130, 90); ctx.fill(); ctx.globalAlpha = 1; }
       var hpf = s.hp / s.maxHp;
       if (hpf < 0.6) { ctx.fillStyle = 'rgba(40,30,20,' + (0.35 * (1 - hpf)) + ')'; ell(ctx, 0, -20, 120, 70); ctx.fill(); }
     } else {
@@ -408,7 +418,7 @@ function drawPillbox(s, C, dead, rec) {
     ctx.globalAlpha = dead ? 0.5 : 1; ctx.drawImage(img, -PILL_W / 2, -PILL_W * 0.86, PILL_W, PILL_W);
     if (!dead && hp0 < 0.5) { ctx.globalAlpha = 0.9 * (1 - hp0 * 2); ctx.fillStyle = 'rgba(40,30,20,0.6)'; ell(ctx, 0, -PILL_W * 0.4, 60, 45); ctx.fill(); }
     ctx.globalAlpha = 1; ctx.restore();
-    if (!dead && s.flashT > 0) { ctx.globalAlpha = s.flashT / 0.08 * 0.5; ctx.fillStyle = '#fff'; ell(ctx, 0, -PILL_W * 0.4, 70, 60); ctx.fill(); ctx.globalAlpha = 1; }
+    if (!dead && s.flashT > 0) { ctx.globalAlpha = s.flashT / 0.18 * 0.5; ctx.fillStyle = '#fff'; ell(ctx, 0, -PILL_W * 0.4, 70, 60); ctx.fill(); ctx.globalAlpha = 1; }
     if (dead) { ctx.fillStyle = 'rgba(30,22,14,0.55)'; ell(ctx, 0, -20, 72, 44); ctx.fill(); ctx.strokeStyle = '#2A2118'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-40, -50); ctx.lineTo(30, 10); ctx.moveTo(-20, 14); ctx.lineTo(36, -38); ctx.stroke(); }
     return;
   }
@@ -435,7 +445,7 @@ function drawPillbox(s, C, dead, rec) {
     // pennant
     ctx.strokeStyle = '#2A2118'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(22, top - 6); ctx.lineTo(22, top - 58); ctx.stroke();
     ctx.fillStyle = team === 0 ? '#3FBF55' : '#E8342A'; ctx.beginPath(); ctx.moveTo(23, top - 58); ctx.lineTo(50, top - 48); ctx.lineTo(23, top - 38); ctx.closePath(); ctx.fill();
-    if (s.flashT > 0) { ctx.globalAlpha = s.flashT / 0.08 * 0.55; ctx.fillStyle = '#fff'; ell(ctx, 0, top * 0.5, 70, 60); ctx.fill(); ctx.globalAlpha = 1; }
+    if (s.flashT > 0) { ctx.globalAlpha = s.flashT / 0.18 * 0.55; ctx.fillStyle = '#fff'; ell(ctx, 0, top * 0.5, 70, 60); ctx.fill(); ctx.globalAlpha = 1; }
     var hpf = s.hp / s.maxHp; if (hpf < 0.5) { ctx.fillStyle = 'rgba(40,30,20,' + (0.45 * (1 - hpf)) + ')'; ell(ctx, 0, top * 0.4, 60, 40); ctx.fill(); }
   } else {
     ctx.fillStyle = 'rgba(30,22,14,0.55)'; ell(ctx, 0, top * 0.4, 72, 44); ctx.fill();
@@ -471,7 +481,7 @@ function drawUnit(u) {
   else {
     var sp = sprite(u.pose, u.team, h, u.facing < 0);
     ctx.drawImage(sp.cv, sp.ox, sp.oy, sp.w, sp.h);
-    if (u.flashT > 0 && !u.dead) { var fs = sprite(u.pose, u.team, h, u.facing < 0, true); ctx.globalAlpha = alpha * (u.flashT / 0.08) * 0.85; ctx.drawImage(fs.cv, sp.ox, sp.oy, sp.w, sp.h); ctx.globalAlpha = alpha; }
+    if (u.flashT > 0 && !u.dead) { var fs = sprite(u.pose, u.team, h, u.facing < 0, true); ctx.globalAlpha = alpha * (u.flashT / 0.18) * 0.85; ctx.drawImage(fs.cv, sp.ox, sp.oy, sp.w, sp.h); ctx.globalAlpha = alpha; }
   }
   if (u.shield > 0 && !u.dead) { ctx.strokeStyle = 'rgba(214,203,170,0.7)'; ctx.lineWidth = 3; ell(ctx, 0, -h * 0.45, 40, h * 0.6); ctx.stroke(); }
   if (u.burnT > 0 && !u.dead && Math.random() < 0.4) addFx({ k: 'flame', x: u.x + rnd(-12, 12), y: u.y - rnd(10, 60), t: 0, dur: 0.3 });
@@ -490,7 +500,7 @@ function drawVehicle(u) {
     if (u.dead) ctx.globalAlpha *= 0.85;
     ctx.drawImage(sp.cv, sp.ox, sp.oy + 2, sp.w, sp.h);
     if (u.dead) { ctx.globalCompositeOperation = 'source-atop'; ctx.fillStyle = 'rgba(20,16,10,0.55)'; ctx.fillRect(sp.ox, sp.oy, sp.w, sp.h); ctx.globalCompositeOperation = 'source-over'; }
-    if (u.flashT > 0 && !u.dead) { var fs = sprite('m_' + u.type, u.team, vh, f < 0, true); ctx.globalAlpha = u.flashT / 0.08 * 0.7; ctx.drawImage(fs.cv, sp.ox, sp.oy + 2, sp.w, sp.h); ctx.globalAlpha = 1; }
+    if (u.flashT > 0 && !u.dead) { var fs = sprite('m_' + u.type, u.team, vh, f < 0, true); ctx.globalAlpha = u.flashT / 0.18 * 0.7; ctx.drawImage(fs.cv, sp.ox, sp.oy + 2, sp.w, sp.h); ctx.globalAlpha = 1; }
     if (u.dead && Math.random() < 0.3) addFx({ k: 'smoke', x: u.x + rnd(-10, 10), y: u.y - 30, t: 0, dur: 1.2, big: 1 });
     ctx.restore(); return;
   }
@@ -510,7 +520,7 @@ function drawVehicle(u) {
     ctx.fillStyle = body; ctx.strokeStyle = C.ol; ctx.lineWidth = 2; ctx.fillRect(-32, -30, 64, 20); ctx.strokeRect(-32, -30, 64, 20);
     ctx.fillStyle = top; ctx.fillRect(-8, -44, 6, 16); ctx.fillRect(16, -36, 16, 8);
   }
-  if (u.flashT > 0 && !u.dead) { ctx.globalAlpha = u.flashT / 0.08 * 0.6; ctx.fillStyle = '#fff'; ctx.fillRect(-36, -44, 72, 46); ctx.globalAlpha = 1; }
+  if (u.flashT > 0 && !u.dead) { ctx.globalAlpha = u.flashT / 0.18 * 0.6; ctx.fillStyle = '#fff'; ctx.fillRect(-36, -44, 72, 46); ctx.globalAlpha = 1; }
   if (u.dead && Math.random() < 0.3) addFx({ k: 'smoke', x: u.x + rnd(-10, 10), y: u.y - 30, t: 0, dur: 1.2, big: 1 });
   ctx.restore();
 }
