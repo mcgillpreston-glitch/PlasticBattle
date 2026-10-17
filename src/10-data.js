@@ -201,7 +201,8 @@ var FIELD_EXTRA = [
   { ax: 459, ay: 1423, bx: 689, by: 1607, r: 138 },
   { ax: 689, ay: 1607, bx: 758, by: 1905, r: 138 },
   { ax: 3261, ay: 344, bx: 3399, by: 252, r: 115 },
-  { ax: 3399, ay: 252, bx: 3445, by: 211, r: 138 }
+  { ax: 3399, ay: 252, bx: 3445, by: 211, r: 138 },
+  { ax: 440, ay: 1290, bx: 380, by: 1335, r: 70 } /* gap between the green tower and the green HQ: keeps the route round the tower open after the top-lane reroute */
 ];
 var LANES = LANE_DEF.map(function (d, li) {
   var pts = d.pts.map(function (p) { return { x: p[0], y: p[1], r: p[2] }; }), cum = [0];
@@ -313,7 +314,7 @@ STRUCT_DEF.push({ team: 1, lane: -1, kind: 'hq', order: 4, x: 3450, y: 200, t: 1
 /* fort towers that are not structures but still block movement */
 var PROPS = [];
 var PROP_C = [
-  { x: 330, y: 1270, r: 60, tag: 'tower' }, { x: 930, y: 1650, r: 60, tag: 'tower' }, { x: 720, y: 1910, r: 60, tag: 'tower' },
+  { x: 330, y: 1270, r: 45, tag: 'tower' }, { x: 930, y: 1650, r: 60, tag: 'tower' }, { x: 720, y: 1910, r: 60, tag: 'tower' },
   { x: 2960, y: 250, r: 60, tag: 'tower' }, { x: 3600, y: 550, r: 60, tag: 'tower' }, { x: 3130, y: 290, r: 45, tag: 'tower' }
 ];
 /* weeds: hiding spots on the painted grass tufts */
