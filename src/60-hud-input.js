@@ -89,7 +89,7 @@ function buildAbilityBar() {
   pc.setTransform(1, 0, 0, 1, 0, 0); pc.clearRect(0, 0, 128, 152); pc.scale(128 / 200, 152 / 240); paintPose(pc, G.player.pose, 0, false);
 }
 function refreshAim() { abilEl.querySelectorAll('.ab').forEach(function (b) { b.classList.toggle('aim', b.dataset.slot === aimSlot); }); }
-var hudT = 0;
+var hudT = 0, hudGhost = { f: null, hold: 0, last: null };
 function hud() {
   var u = G.player;
   document.getElementById('kg').textContent = G.kills[0];
@@ -102,12 +102,17 @@ function hud() {
     if (s === 'D' && u.tagMark) { el.hidden = false; el.textContent = 'GO'; el.style.background = 'rgba(180,67,46,0.7)'; return; }
     if (u.dead) { el.hidden = false; el.textContent = ''; el.style.background = 'rgba(0,0,0,0.6)'; return; }
     var show = cd > 0 && !opts.nocd;
-    el.hidden = !show;
-    if (show) { var pct = Math.round(100 * cd / Math.max(0.01, u.cdMax[s])); el.textContent = cd >= 1 ? Math.ceil(cd) : cd.toFixed(1); el.style.background = 'linear-gradient(to top, rgba(0,0,0,0.82) ' + pct + '%, rgba(0,0,0,0.25) 0)'; }
+    el.hidden = !show; el.style.background = '';
+    if (show) { el.style.setProperty('--p', clamp(cd / Math.max(0.01, u.cdMax[s]), 0, 1).toFixed(3)); el.textContent = cd >= 1 ? Math.ceil(cd) : cd.toFixed(1); }
   });
   var mh = maxHp(u);
   var hpf = clamp(u.hp / mh, 0, 1), hpm = document.getElementById('hpi').parentNode;
   document.getElementById('hpi').style.width = (100 * hpf) + '%';
+  // damage ghost: the pale segment behind the bar shows what the last hits took; it holds briefly, then drains after the bar
+  if (hudGhost.f == null || hpf > hudGhost.f) { hudGhost.f = hpf; hudGhost.hold = 0; } else if (hpf < hudGhost.f) { if (hudGhost.last == null || hpf < hudGhost.last) hudGhost.hold = 0.45; }
+  if (hudGhost.hold > 0) hudGhost.hold -= 0.1; else hudGhost.f = Math.max(hpf, hudGhost.f - 0.09);
+  hudGhost.last = hpf;
+  document.getElementById('hpg').style.width = (100 * hudGhost.f) + '%';
   hpm.classList.toggle('crit', !u.dead && hpf < 0.3); hpm.classList.toggle('warn', !u.dead && hpf >= 0.3 && hpf < 0.6);
   document.getElementById('shb').style.width = (100 * clamp((u.hp + u.shield) / mh, 0, 1)) + '%';
   document.getElementById('hpt').textContent = u.dead ? 'REINFORCING · ' + Math.ceil(u.respawn) + 'S' : Math.ceil(u.hp) + ' / ' + mh;
