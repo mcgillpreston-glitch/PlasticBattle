@@ -3,6 +3,7 @@
 
 Usage: python3 tools/prep-anim.py <hero key> <master png> <frames dir>
   <frames dir> holds the delivered 1254-px frames named <key>_<slot>_<n>.png.
+Each frame's green is first matched to the master's brightness and saturation.
 Writes assets/heroes/anim/<key>_<slot>_<n>.png and, when the hero has a hand-made tan figure, the tan version of each
 frame under assets/heroes/tan/anim/. Prints one line per frame.
 
@@ -19,17 +20,22 @@ from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TH = 8          # alpha threshold the idle crop was cut with
-BAND = 120      # rows above the baseline treated as the base plate
 
 
-def plate(im):
-    """(centre x of the plate's solid pixels, baseline row) in this image's pixels."""
-    a = np.asarray(im.getchannel('A'))
-    rows = np.where((a > 128).sum(1) >= 16)[0]
-    base = int(rows.max())
-    band = a[max(0, base - BAND):base + 1] > 128
-    _, xs = np.nonzero(band)
-    return float(xs.mean()), base
+def plate(im, reach=90):
+    """(centre x of the base plate, baseline row) in this image's pixels.
+    The plate is a tilted slab seen from above and boots sit on it, so it is measured from its underside: the columns whose
+    lowest solid pixel lies within `reach` px of the baseline give the plate's span; its centre is the span's midpoint.
+    Generated poses may come with a wider or narrower plate than the master; centring the spans keeps the figure from
+    jumping sideways even then."""
+    a = np.asarray(im.getchannel('A')) > 128
+    base = int(np.where(a.sum(1) >= 16)[0].max())
+    H, W = a.shape
+    has = a.any(0)
+    low = np.full(W, -1)
+    low[has] = H - 1 - np.argmax(a[::-1, has], axis=0)
+    cols = np.where(low >= base - reach)[0]
+    return (cols.min() + cols.max()) / 2.0, base
 
 
 def tan_lut(key):
@@ -75,6 +81,28 @@ def apply_lut(im, lut):
     return Image.fromarray(np.clip(o, 0, 255).astype(np.uint8), 'RGBA')
 
 
+def match_tone(fr, master):
+    """Match a frame's green to the master's: brightness by rank (each pixel keeps its hue), then overall saturation.
+    Generated poses drift lighter or more saturated from one sitting to the next; this pulls them back."""
+    lum = lambda x: x[..., 0] * 0.299 + x[..., 1] * 0.587 + x[..., 2] * 0.114
+    a = np.asarray(fr.convert('RGBA')).astype(np.float64)
+    m = np.asarray(master.convert('RGBA')).astype(np.float64)
+    fa, ma = a[..., 3] > 200, m[..., 3] > 200
+    q = np.linspace(0, 1, 256)
+    lf, lm = lum(a), lum(m)
+    f_at, m_at = np.quantile(lf[fa], q), np.quantile(lm[ma], q)
+    target = np.interp(lf, f_at, m_at)
+    k = np.where(lf > 1, target / np.maximum(lf, 1), 1.0)[..., None]
+    rgb = a[..., :3] * k
+    sat = lambda x, msk: np.mean((x[..., :3].max(-1) - x[..., :3].min(-1))[msk] / np.maximum(x[..., :3].max(-1)[msk], 1))
+    sf, sm = sat(np.dstack([rgb, a[..., 3:]]), fa), sat(m, ma)
+    if sf > 0:
+        grey = lum(rgb)[..., None]
+        rgb = grey + (rgb - grey) * (sm / sf)
+    a[..., :3] = np.clip(rgb, 0, 255)
+    return Image.fromarray(a.astype(np.uint8), 'RGBA')
+
+
 def box(im, th=TH):
     a = np.asarray(im.getchannel('A'))
     ys, xs = np.nonzero(a > th)
@@ -98,7 +126,7 @@ def main(key, master_path, frames_dir):
     if not names:
         sys.exit('no frames named %s_<slot>_<n>.png in %s' % (key, frames_dir))
     for name in names:
-        fr = Image.open(os.path.join(frames_dir, name)).convert('RGBA')
+        fr = match_tone(Image.open(os.path.join(frames_dir, name)).convert('RGBA'), master)
         fcx, fbase = plate(fr)
         dx, dy = mcx - fcx, mbase - fbase
         # shift the frame so its plate lands on the master's plate
