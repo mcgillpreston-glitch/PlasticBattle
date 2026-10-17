@@ -180,7 +180,7 @@ function aaStyle(u) { return u.kind === 'hero' ? u.spec.aa : (u.type === 'melee'
 function windTime(u) {
   var s = aaStyle(u);
   if (u.kind === 'hero') return (s === 'melee' ? 0.12 : s === 'shell' ? 0.22 : Math.min(0.16, aaCd(u) * 0.35)) * 0.6;
-  return s === 'tank' ? 0.32 : s === 'melee' ? 0.14 : 0.2;
+  return s === 'tank' ? 0.2 : s === 'melee' ? 0.09 : 0.13;
 }
 function aimPoint(t) { return { x: t.x, y: t.isStruct ? t.y - 50 : t.y - unitH(t) * 0.45 }; }
 function attack(u, t) {
@@ -198,7 +198,7 @@ function attack(u, t) {
   if (style === 'melee') {
     anim(u, 'l');
     fx({ k: 'slash', x: ap.x, y: ap.y, t: 0, dur: 0.22, dir: u.facing, big: hero });
-    fx({ k: 'impact', x: ap.x, y: ap.y, t: 0, dur: 0.18, heavy: false, team: u.team });
+    fx({ k: 'impact', x: ap.x, y: ap.y, t: 0, dur: 0.3, heavy: false, team: u.team });
     sfx('melee', u.x, u.y);
     hitFeedback(u, t, u.facing);
     damage(u, t, dmg, { aa: 1, smul: u.smul });
@@ -234,7 +234,7 @@ function updateRounds(dt) {
     r.px = r.x; r.py = r.y;
     if (d <= s || r.life <= 0) {
       r.x = r.lx; r.y = r.ly;
-      fx({ k: 'impact', x: r.x, y: r.y, t: 0, dur: r.heavy ? 0.3 : 0.18, heavy: r.heavy, team: r.team });
+      fx({ k: 'impact', x: r.x, y: r.y, t: 0, dur: r.heavy ? 0.42 : 0.3, heavy: r.heavy, team: r.team });
       if (r.heavy) { fx({ k: 'boom', x: r.x, y: r.y + 30, r: 46, t: 0, dur: 0.35 }); sfx('boom', r.x, r.y); }
       if (alive) {
         hitFeedback(r.owner, r.tgt, dx >= 0 ? 1 : -1);
@@ -425,19 +425,23 @@ function updateBarrage(dt) {
     if (b.acc <= 0) { b.acc = 0.22; var a = rnd(0, Math.PI * 2), rr = Math.random() * G.barrage.r; fx({ k: 'splash', x: b.x + Math.cos(a) * rr, y: b.y + Math.sin(a) * rr * 0.6, t: 0, dur: 0.5 }); sfx('splash', b.x, b.y); }
   });
 }
+/* Units are solid: no two living, non-dashing units may overlap. Pushes split by mass (heroes are heavier than minions), and the pass repeats so a crowd settles instead of trading overlaps. */
+function unitMass(u) { return u.kind === 'hero' ? 1.6 : u.type === 'tank' ? 2.4 : u.type === 'jeep' ? 1.3 : 1; }
 function separate(dt) {
   var arr = G.units;
-  for (var i = 0; i < arr.length; i++) {
-    var a = arr[i]; if (a.dead || a.dash) continue;
-    for (var j = i + 1; j < arr.length; j++) {
-      var b = arr[j]; if (b.dead || b.dash) continue;
-      var dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy, m = (a.r + b.r) * 0.8;
-      if (d2 < m * m && d2 > 0.01) {
-        var d = Math.sqrt(d2), push = (m - d), nx = dx / d, ny = dy / d;
-        var wa = 0.5, wb = 0.5;
-        if (a.kind === 'hero' && b.kind === 'minion') { wa = 0.05; wb = 0.95; }
-        else if (b.kind === 'hero' && a.kind === 'minion') { wa = 0.95; wb = 0.05; }
-        a.x -= nx * push * wa; a.y -= ny * push * wa; b.x += nx * push * wb; b.y += ny * push * wb;
+  for (var pass = 0; pass < 3; pass++) {
+    for (var i = 0; i < arr.length; i++) {
+      var a = arr[i]; if (a.dead || a.dash) continue;
+      for (var j = i + 1; j < arr.length; j++) {
+        var b = arr[j]; if (b.dead || b.dash) continue;
+        var dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy, m = a.r + b.r;
+        if (d2 < m * m) {
+          var d = Math.sqrt(d2), push = m - d, nx, ny;
+          if (d2 > 0.01) { nx = dx / d; ny = dy / d; } else { var ang = (a.id * 2.399) % (Math.PI * 2); nx = Math.cos(ang); ny = Math.sin(ang); }
+          var ma = unitMass(a), mb = unitMass(b), tot = ma + mb;
+          a.x -= nx * push * (mb / tot); a.y -= ny * push * (mb / tot);
+          b.x += nx * push * (ma / tot); b.y += ny * push * (ma / tot);
+        }
       }
     }
   }

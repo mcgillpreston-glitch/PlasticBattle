@@ -534,11 +534,12 @@ function drawAimLines() {
 function drawFx(f) {
   var p = f.t / f.dur;
   if (f.k === 'impact') {
-    var s = f.heavy ? 1.8 : 1; ctx.save(); ctx.translate(f.x, f.y); ctx.globalAlpha = 1 - p;
+    var s = (f.heavy ? 1.8 : 1) * 1.45; ctx.save(); ctx.translate(f.x, f.y); ctx.globalAlpha = 1 - p * p;
     ctx.fillStyle = 'rgba(227,203,147,0.7)'; ell(ctx, 0, 6 + p * 4, (6 + 18 * p) * s, (4 + 10 * p) * s); ctx.fill();
     ctx.strokeStyle = '#FFF4C8'; ctx.lineWidth = 2 * s;
     for (var i = 0; i < 5; i++) { var a = i * Math.PI * 2 / 5 + 0.3 + f.x % 1, r0 = 3 * s, r1 = (8 + 14 * p) * s; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); ctx.lineTo(Math.cos(a) * r1, Math.sin(a) * r1 * 0.7); ctx.stroke(); }
-    ctx.fillStyle = '#FFFBE6'; ell(ctx, 0, 0, 5 * s * (1 - p) + 1, 5 * s * (1 - p) + 1); ctx.fill(); ctx.restore(); ctx.globalAlpha = 1; return;
+    ctx.strokeStyle = 'rgba(255,250,220,0.9)'; ctx.lineWidth = 3; ell(ctx, 0, 0, (4 + 22 * p) * s, (3 + 12 * p) * s); ctx.stroke();
+    ctx.fillStyle = '#FFFBE6'; ell(ctx, 0, 0, 6 * s * (1 - p) + 1.5, 6 * s * (1 - p) + 1.5); ctx.fill(); ctx.restore(); ctx.globalAlpha = 1; return;
   }
   if (f.k === 'hitmark') {
     var kill = f.kill, sc = kill ? 1.5 : 1, g0 = (6 + p * 4) * sc, g1 = g0 + 10 * sc;
