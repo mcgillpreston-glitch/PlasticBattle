@@ -426,7 +426,7 @@ function updateBarrage(dt) {
   });
 }
 /* Units are solid: no two living, non-dashing units may overlap. Pushes split by mass (heroes are heavier than minions), and the pass repeats so a crowd settles instead of trading overlaps. */
-function unitMass(u) { return u.kind === 'hero' ? 1.6 : u.type === 'tank' ? 2.4 : u.type === 'jeep' ? 1.3 : 1; }
+function unitMass(u) { return 1; }
 function separate(dt) {
   var arr = G.units;
   for (var pass = 0; pass < 3; pass++) {
