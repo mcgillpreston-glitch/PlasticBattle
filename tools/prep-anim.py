@@ -22,20 +22,47 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TH = 8          # alpha threshold the idle crop was cut with
 
 
-def plate(im, reach=90):
+def plate(im, frac=0.35, tol=14, reach=90):
     """(centre x of the base plate, baseline row) in this image's pixels.
-    The plate is a tilted slab seen from above and boots sit on it, so it is measured from its underside: the columns whose
-    lowest solid pixel lies within `reach` px of the baseline give the plate's span; its centre is the span's midpoint.
-    Generated poses may come with a wider or narrower plate than the master; centring the spans keeps the figure from
-    jumping sideways even then."""
+    The plate is a slab seen from above with boots, bodies or bipods resting on it, so it is found two ways and the longer
+    find is kept (each fails in its own way, and a failure always finds a shorter piece of plate):
+      - underside band: the columns whose lowest solid pixel lies within `reach` px of the baseline. Robust to raised feet,
+        but on a steeply tilted slab (a long prone figure) it only reaches part of the plate.
+      - underside line: a line fitted to the figure's underside near the bottom, outliers rejected, plate = the longest run
+        of columns on that line. Follows a tilted slab end to end, but can lock onto a raised foot on a small plate.
+    The centre is the kept span's midpoint. Generated poses may come on a wider or narrower plate than the master;
+    centring keeps the figure from jumping sideways even then."""
     a = np.asarray(im.getchannel('A')) > 128
     base = int(np.where(a.sum(1) >= 16)[0].max())
+    ys, _ = np.nonzero(a)
+    fh = base - ys.min()
     H, W = a.shape
     has = a.any(0)
-    low = np.full(W, -1)
+    low = np.full(W, -1.0)
     low[has] = H - 1 - np.argmax(a[::-1, has], axis=0)
-    cols = np.where(low >= base - reach)[0]
-    return (cols.min() + cols.max()) / 2.0, base
+    band = np.where(low >= base - reach)[0]
+    spans = [(int(band.min()), int(band.max()))]
+    xs = np.where(low >= base - frac * fh)[0]
+    if len(xs) >= 20:
+        y = low[xs]
+        keep = np.ones(len(xs), bool)
+        for _ in range(6):
+            k, c = np.polyfit(xs[keep], y[keep], 1)
+            new = np.abs(y - (k * xs + c)) < tol
+            if new.sum() < 20 or (new == keep).all():
+                break
+            keep = new
+        xi = xs[keep]
+        if len(xi):
+            runs, start = [], xi[0]
+            for p, q in zip(xi[:-1], xi[1:]):
+                if q - p > 12:
+                    runs.append((start, p))
+                    start = q
+            runs.append((start, xi[-1]))
+            spans.append(max(runs, key=lambda r: r[1] - r[0]))
+    x0, x1 = max(spans, key=lambda r: r[1] - r[0])
+    return (x0 + x1) / 2.0, base
 
 
 def tan_lut(key):
