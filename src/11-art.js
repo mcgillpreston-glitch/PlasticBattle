@@ -166,9 +166,9 @@ function loadHeroArt(img) {
   var AF = typeof ANIM_FRAMES === 'object' ? ANIM_FRAMES : {};
   Object.keys(AF).forEach(function (key) { Object.keys(AF[key]).forEach(function (slot) { for (var n = 1; n <= AF[key][slot]; n++) (function (n) {
     var nm = key + '_' + slot + '_' + n, h = HERO_ANIM[key] || (HERO_ANIM[key] = {}), f = h[slot] || (h[slot] = []), fr = f[n - 1] || (f[n - 1] = { img: null, tan: null });
-    img('assets/heroes/anim/' + nm + '.png', function (im) { if (im) fr.img = im; });
+    img('assets/heroes/anim/' + nm + '.webp', function (im) { if (im) fr.img = im; });
     // tan frames are colour-matched to the hand-made tan figure offline (tools/prep-anim.py); without one, the runtime recolour is used
-    if (typeof ANIM_TAN === 'object' && ANIM_TAN[nm]) img('assets/heroes/tan/anim/' + nm + '.png', function (im) { if (im) fr.tan = im; });
+    if (typeof ANIM_TAN === 'object' && ANIM_TAN[nm]) img('assets/heroes/tan/anim/' + nm + '.webp', function (im) { if (im) fr.tan = im; });
   })(n); }); });
   ['melee', 'rifle', 'mortar', 'tank', 'jeep'].forEach(function (k) { pair('m_' + k, 'assets/minions/' + k); });
 }

@@ -4,7 +4,7 @@
 Usage: python3 tools/prep-anim.py <hero key> <master png> <frames dir>
   <frames dir> holds the delivered 1254-px frames named <key>_<slot>_<n>.png.
 Each frame's green is first matched to the master's brightness and saturation.
-Writes assets/heroes/anim/<key>_<slot>_<n>.png and, when the hero has a hand-made tan figure, the tan version of each
+Writes assets/heroes/anim/<key>_<slot>_<n>.webp and, when the hero has a hand-made tan figure, the tan version of each
 frame under assets/heroes/tan/anim/. Prints one line per frame.
 
 The idle image assets/heroes/<key>.png is the master cropped to its alpha > 8 box and scaled down. Each frame is
@@ -20,6 +20,8 @@ from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TH = 8          # alpha threshold the idle crop was cut with
+# WebP at quality 88: about a fifth of the PNG size, mean colour error under 4 levels; alpha kept lossless
+WEBP = dict(quality=88, method=6, alpha_quality=100)
 
 
 def plate(im, frac=0.35, tol=14, reach=90):
@@ -170,9 +172,10 @@ def main(key, master_path, frames_dir):
         w = max(1, int(round(crop.size[0] * scale)))
         h = max(1, int(round(crop.size[1] * scale)))
         out = crop.resize((w, h), Image.LANCZOS)
-        out.save(os.path.join(out_dir, name), optimize=True)
+        stem = name[:-4] + '.webp'
+        out.save(os.path.join(out_dir, stem), 'WEBP', **WEBP)
         if lut is not None:
-            apply_lut(out, lut).save(os.path.join(tan_dir, name), optimize=True)
+            apply_lut(out, lut).save(os.path.join(tan_dir, stem), 'WEBP', **WEBP)
         print('%s  plate shift (%+.1f, %+d) px  -> %dx%d (idle %dx%d)' % (name, dx, dy, w, h, idle.size[0], idle.size[1]))
 
 
