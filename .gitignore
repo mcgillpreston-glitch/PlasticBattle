@@ -5,3 +5,4 @@ _site/
 dist/
 worker/sim.gen.js
 .wrangler/
+__pycache__/
