@@ -332,13 +332,33 @@ function ensureNav() {
   NAV.nt = Math.floor(MAP.W / c) + 1; NAV.no = Math.floor(MAP.H / c) + 1;
   var N = NAV.nt * NAV.no, fresh = !NAV.sd || NAV.sd.length !== N;
   if (fresh) { NAV.sd = new Float32Array(N); NAV.fsd = new Float32Array(N); NAV.px = new Float32Array(N); NAV.py = new Float32Array(N); NAV.g = new Float32Array(N); NAV.came = new Int32Array(N); NAV.stamp = new Int32Array(N); NAV.closed = new Int32Array(N); NAV.cur = 0; }
-  var bl = G.blockers;
-  for (var i = 0; i < NAV.nt; i++) for (var j = 0; j < NAV.no; j++) {
-    var k = i * NAV.no + j, x = i * c, y = j * c;
-    if (fresh) { NAV.px[k] = x; NAV.py[k] = y; NAV.fsd[k] = fieldSD(x, y); }
-    var m = NAV.fsd[k];
+  var bl = G.blockers, keys = {}, changed = [], had = !!NAV.bkeys, bk = function (o) { return [o.x, o.y, o.r, o.ax, o.ay, o.bx, o.by].join(','); };
+  bl.forEach(function (o) { var kk = bk(o); keys[kk] = o; if (!fresh && NAV.bkeys && !NAV.bkeys[kk]) changed.push(o); });
+  if (!fresh && NAV.bkeys) for (var ok in NAV.bkeys) if (!keys[ok]) changed.push(NAV.bkeys[ok]);
+  NAV.bkeys = keys;
+  function cellAt(i2, j2) {
+    var k = i2 * NAV.no + j2, m = NAV.fsd[k], x = NAV.px[k], y = NAV.py[k];
     if (m > -60) for (var b = 0; b < bl.length; b++) { var d = surfDist(bl[b], x, y); if (d < m) m = d; }
     NAV.sd[k] = m;
+  }
+  if (fresh || !had || changed.length > 8) {
+    var mx = 0;
+    for (var i = 0; i < NAV.nt; i++) for (var j = 0; j < NAV.no; j++) {
+      var k = i * NAV.no + j;
+      if (fresh) { NAV.px[k] = i * c; NAV.py[k] = j * c; NAV.fsd[k] = fieldSD(i * c, j * c); if (NAV.fsd[k] > mx) mx = NAV.fsd[k]; }
+      cellAt(i, j);
+    }
+    if (fresh) NAV.fmax = mx;
+  } else {
+    /* Only a turret or building came or went: a blocker can only lower a cell's clearance where it is nearer than the field
+       edge, so just the cells within (its size + the widest field clearance) of it need redoing. Same result as a full rebuild. */
+    changed.forEach(function (o) {
+      var ax = o.ax == null ? o.x : Math.min(o.ax, o.bx), bx = o.ax == null ? o.x : Math.max(o.ax, o.bx);
+      var ay = o.ax == null ? o.y : Math.min(o.ay, o.by), by = o.ax == null ? o.y : Math.max(o.ay, o.by), ext = o.r + (o.h || 0) + NAV.fmax + c;
+      var i0 = Math.max(0, Math.floor((ax - ext) / c)), i1 = Math.min(NAV.nt - 1, Math.ceil((bx + ext) / c));
+      var j0 = Math.max(0, Math.floor((ay - ext) / c)), j1 = Math.min(NAV.no - 1, Math.ceil((by + ext) / c));
+      for (var i = i0; i <= i1; i++) for (var j = j0; j <= j1; j++) cellAt(i, j);
+    });
   }
   NAV.built = NAV.ver;
 }
@@ -371,6 +391,10 @@ function findPath(sx, sy, gx, gy, r) {
     if (hk.length) { hk[0] = lk; hf[0] = lf; var i = 0, n = hk.length; for (;;) { var l = 2 * i + 1, r2 = l + 1, m = i; if (l < n && hf[l] < hf[m]) m = l; if (r2 < n && hf[r2] < hf[m]) m = r2; if (m === i) break; var tk = hk[m]; hk[m] = hk[i]; hk[i] = tk; var tf = hf[m]; hf[m] = hf[i]; hf[i] = tf; i = m; } }
     return top;
   }
+  /* Octile distances on the grid (no square roots), and a heuristic weighted by 1.25: the search heads for the goal instead
+     of flooding every lane around it. Routes stay within 25% of the shortest (in practice a few %) and are straightened below. */
+  var CS = NAV.cell, D2 = CS * Math.SQRT2, gi = (g / no) | 0, gj = g - gi * no, HW = 1.25;
+  function heur(k2) { var a2 = (k2 / no) | 0, b2 = k2 - a2 * no, x2 = a2 > gi ? a2 - gi : gi - a2, y2 = b2 > gj ? b2 - gj : gj - b2; return HW * (x2 > y2 ? CS * (x2 - y2) + D2 * y2 : CS * (y2 - x2) + D2 * x2); }
   st[s] = stamp; gs[s] = 0; came[s] = -1; push(s, 0);
   var found = false, iter = 0;
   while (hk.length) {
@@ -384,8 +408,8 @@ function findPath(sx, sy, gx, gy, r) {
       var ni = ci + di, nj = cj + dj; if (ni < 0 || nj < 0 || ni >= nt || nj >= no) continue;
       var nk = ni * no + nj; if (sd[nk] < rr || cl[nk] === stamp) continue;
       if (di && dj && (sd[ci * no + nj] < rr || sd[ni * no + cj] < rr)) continue;
-      var ng = gs[k] + vlen(px[nk] - px[k], py[nk] - py[k]);
-      if (st[nk] !== stamp || ng < gs[nk]) { st[nk] = stamp; gs[nk] = ng; came[nk] = k; push(nk, ng + vlen(px[nk] - px[g], py[nk] - py[g])); }
+      var ng = gs[k] + (di && dj ? D2 : CS);
+      if (st[nk] !== stamp || ng < gs[nk]) { st[nk] = stamp; gs[nk] = ng; came[nk] = k; push(nk, ng + heur(nk)); }
     }
   }
   if (!found) return null;
@@ -393,10 +417,18 @@ function findPath(sx, sy, gx, gy, r) {
   var pts = [{ x: sx, y: sy }]; cells.forEach(function (c2) { pts.push({ x: px[c2], y: py[c2] }); });
   if (pointClear(gx, gy, r)) pts.push({ x: gx, y: gy });
   var out = [], a = 0;
-  while (a < pts.length - 1) {
-    var nxt = a + 1;
-    for (var b = pts.length - 1; b > a + 1; b--) if (segClear(pts[a].x, pts[a].y, pts[b].x, pts[b].y, r - 0.5)) { nxt = b; break; }
-    out.push(pts[nxt]); a = nxt;
+  /* String-pull: from each kept corner, jump as far along the path as is in clear sight. The reach is found by doubling the
+     jump until sight fails, then halving back, so a long route costs a few sight checks per corner. (The old version tested
+     every later point from the far end: tens of ms on long routes, enough to stall a server tick.) */
+  var L = pts.length;
+  function vis(i, j) { return segClear(pts[i].x, pts[i].y, pts[j].x, pts[j].y, r - 0.5); }
+  while (a < L - 1) {
+    var lo = a + 1, step = 1;
+    while (lo + step < L && vis(a, lo + step)) { lo += step; step *= 2; }
+    var hi = Math.min(L - 1, lo + step) ;
+    while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (vis(a, mid)) lo = mid; else hi = mid; }
+    if (hi !== lo && hi < L && vis(a, hi)) lo = hi;
+    out.push(pts[lo]); a = lo;
   }
   return out;
 }
