@@ -3,9 +3,21 @@
 /* ---------------- Rendering ---------------- */
 var cv = document.getElementById('game'), ctx = cv.getContext('2d');
 var mini = document.getElementById('miniCv'), mctx = mini.getContext('2d');
+/* Automatic render resolution: on a high-DPI screen the canvas starts at 1.5x; if frames then average over 22 ms (under about
+   45 fps) for two seconds of play, it drops to 1x, which roughly doubles the frame rate. Ticking or unticking the Esc-menu
+   low-resolution box overrides it. */
+var autoRes = { low: false, off: false, acc: 0, n: 0, grace: 3 };
+function autoResTick(ms, playing) {
+  if (autoRes.low || autoRes.off || opts.lowRes || DPR <= 1 || !playing || document.hidden) { autoRes.acc = autoRes.n = 0; return; }
+  if (autoRes.grace > 0) { autoRes.grace -= ms / 1000; return; }
+  autoRes.acc += ms; autoRes.n++;
+  if (autoRes.acc < 2000) return;
+  var avg = autoRes.acc / autoRes.n; autoRes.acc = autoRes.n = 0;
+  if (avg > 22) { autoRes.low = true; resize(); showToast('Lowered render resolution for a smoother frame rate (Esc menu to change)', 4); }
+}
 var DPR = 1, VW = 0, VH = 0, terrain = null, grainCv = null, blendOK = { saturation: false, overlay: false };
 function resize() {
-  DPR = Math.min(opts.lowRes ? 1 : 1.5, window.devicePixelRatio || 1);
+  DPR = Math.min(opts.lowRes || autoRes.low ? 1 : 1.5, window.devicePixelRatio || 1);
   VW = cv.clientWidth; VH = cv.clientHeight;
   cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
   SIDE_W = 0;

@@ -149,7 +149,10 @@ function updateUnit(u, dt) {
   if (tgt) {
     var rng = aaRange(u) + (tgt.r || 0) + u.r * 0.5;
     var dd = dist(u, tgt);
-    if (dd <= rng) {
+    /* Hysteresis: a unit already in range keeps firing until it is shoved a little past the edge. Without it, crowd pushes
+       knock front-liners just out of range every few frames, so they step in, get pushed out, and restart their wind-up. */
+    if (dd <= rng + (u.inR === tgt ? Math.max(10, u.r) : 0)) {
+      u.inR = tgt;
       u.path = null;
       if (u.kind === 'minion' && WALK_SHOOT && u.move && spd > 0) { wantMove = true; stepToward(u, u.move.x, u.move.y, spd * dt, 4); }
       if (Math.abs(tgt.x - u.x) > 4) u.facing = tgt.x < u.x ? -1 : 1;
@@ -158,7 +161,7 @@ function updateUnit(u, dt) {
         u.wind.t += dt;
         if (u.wind.t >= u.wind.dur) { u.wind = null; attack(u, tgt); }
       }
-    } else { u.wind = null; if (spd > 0) { wantMove = true; var gx = tgt.x, gy = tgt.y;
+    } else { u.wind = null; u.inR = null; if (spd > 0) { wantMove = true; var gx = tgt.x, gy = tgt.y;
         /* Vehicles chasing a hero walk to the lane point beside it, not onto the hero: a hero at the field edge would otherwise pin them there. */
         if (u.kind === 'minion' && (u.type === 'jeep' || u.type === 'tank') && tgt.kind === 'hero' && u.lane != null) { var hq0 = laneProj(tgt, u.lane); var lp = lanePt(hq0.t, clamp(hq0.off, -60, 60), u.lane); gx = lp.x; gy = lp.y; }
         stepToward(u, gx, gy, spd * dt, rng * 0.9); } }

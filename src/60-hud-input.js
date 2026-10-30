@@ -364,7 +364,7 @@ function openMenu() {
   document.getElementById('mCopy').hidden = !(NET.mode === 'online' && NETC.room);
   document.getElementById('mSound').checked = !!opts.sound;
   document.getElementById('mVol').value = Math.round((opts.volume == null ? 0.55 : opts.volume) * 100);
-  document.getElementById('mLowRes').checked = !!opts.lowRes;
+  document.getElementById('mLowRes').checked = !!(opts.lowRes || autoRes.low);
   document.getElementById('mFps').checked = !document.getElementById('dev').hidden;
   document.getElementById('mShake').checked = !opts.noShake;
   document.getElementById('mEdge').value = opts.edge == null ? 50 : opts.edge;
@@ -376,7 +376,7 @@ function closeMenu() { menuEl.hidden = true; }
 document.getElementById('mResume').addEventListener('click', closeMenu);
 document.getElementById('mSound').addEventListener('change', function (e) { opts.sound = e.target.checked; document.getElementById('dSound').checked = opts.sound; lsSet('pf_sound', opts.sound ? '1' : '0'); });
 document.getElementById('mVol').addEventListener('input', function (e) { opts.volume = Number(e.target.value) / 100; if (AMaster) AMaster.gain.value = opts.volume; lsSet('pf_volume', String(opts.volume)); });
-document.getElementById('mLowRes').addEventListener('change', function (e) { opts.lowRes = e.target.checked; lsSet('pf_lowres', opts.lowRes ? '1' : '0'); resize(); });
+document.getElementById('mLowRes').addEventListener('change', function (e) { opts.lowRes = e.target.checked; lsSet('pf_lowres', opts.lowRes ? '1' : '0'); if (!opts.lowRes) { autoRes.low = false; autoRes.off = true; } resize(); });
 document.getElementById('mFps').addEventListener('change', function (e) { document.getElementById('dev').hidden = !e.target.checked; lsSet('pf_fps', e.target.checked ? '1' : '0'); });
 document.getElementById('mShake').addEventListener('change', function (e) { opts.noShake = !e.target.checked; lsSet('pf_shake', e.target.checked ? '1' : '0'); });
 document.getElementById('mEdge').addEventListener('input', function (e) { opts.edge = Number(e.target.value); lsSet('pf_edge', String(opts.edge)); });
@@ -459,7 +459,8 @@ document.getElementById('again').addEventListener('click', function () { if (NET
 /* ---------------- Loop ---------------- */
 var last = performance.now(), fpsAcc = 0, fpsN = 0;
 function frame(now) {
-  var raw = Math.min(0.05, (now - last) / 1000); last = now;
+  var frameMs = now - last, raw = Math.min(0.05, frameMs / 1000); last = now;
+  autoResTick(frameMs, !!(G && G.player && draftEl.hidden && menuEl.hidden && !opts.pause));
   fpsAcc += raw; fpsN++;
   if (fpsAcc > 0.5) { document.getElementById('fps').textContent = Math.round(fpsN / fpsAcc) + ' fps'; fpsAcc = 0; fpsN = 0; }
   if (NET.mode === 'local' && G && !opts.pause && draftEl.hidden && ordersModal.hidden && swapModal.hidden && menuEl.hidden) {
@@ -521,4 +522,4 @@ function start() {
 }
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(start, start); else start();
 
-window.__PF = { get G() { return G; }, get NET() { return NET; }, predDebug: predDebug, cmdTarget: cmdTarget, cmdMove: cmdMove, cmdCast: cmdCast, clearDir: clearDir, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };
+window.__PF = { get G() { return G; }, get autoRes() { return autoRes; }, get DPR() { return DPR; }, get NET() { return NET; }, predDebug: predDebug, cmdTarget: cmdTarget, cmdMove: cmdMove, cmdCast: cmdCast, clearDir: clearDir, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };

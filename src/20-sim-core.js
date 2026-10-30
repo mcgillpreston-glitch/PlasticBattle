@@ -413,9 +413,9 @@ function stepToward(u, x, y, step, stopAt) {
   else { straight = segClear(u.x, u.y, x, y, u.r - 1); u.scAt = G.time; }
   if (straight) u.path = null;
   else {
-    var need = !u.path || u.pathVer !== NAV.ver || !u.pathGoal || vlen(u.pathGoal.x - x, u.pathGoal.y - y) > 32 || u.repath;
+    var need = !u.path || u.pathVer !== NAV.ver || !u.pathGoal || vlen(u.pathGoal.x - x, u.pathGoal.y - y) > 48 || u.repath;
     if (need && !(u.pathCd > 0)) {
-      u.path = findPath(u.x, u.y, x, y, u.r); u.pathGoal = { x: x, y: y }; u.pathVer = NAV.ver; u.repath = false; u.pathCd = u.path ? 0.05 : 0.3;
+      u.path = findPath(u.x, u.y, x, y, u.r); u.pathGoal = { x: x, y: y }; u.pathVer = NAV.ver; u.repath = false; u.pathCd = u.path ? 0.15 : 0.3;
     }
     var P = u.path;
     if (P && P.length) {
@@ -440,7 +440,17 @@ function watchdog(u, dt, want, spd) {
   if (u.wdT < 0.5) return;
   if (vlen(u.x - u.wdX, u.y - u.wdY) < spd * 0.5 * 0.2) {
     u.wdN = (u.wdN || 0) + 1; u.repath = true; u.pathCd = 0;
-    if (u.wdN >= 2) { var a = rnd(0, Math.PI * 2); u.kvx += Math.cos(a) * 170; u.kvy += Math.sin(a) * 170; u.path = null; }
+    if (u.wdN >= 2) {
+      /* unstick with a sidestep relative to where the unit is heading, toward the clearer side (alternating when both are
+         clear), with a slight forward lean. A random kick often sent units backwards, which read as twitching. */
+      var gl = (u.path && u.path[0]) || u.move || (u.target && !u.target.dead ? u.target : null), hx, hy;
+      if (gl) { hx = gl.x - u.x; hy = gl.y - u.y; } else { var a0 = rnd(0, Math.PI * 2); hx = Math.cos(a0); hy = Math.sin(a0); }
+      var hl = vlen(hx, hy) || 1; hx /= hl; hy /= hl;
+      var px = -hy, py = hx, rr = (u.r || 10) * 2.2, side = (u.wdN % 2) ? 1 : -1;
+      var okA = pointClear(u.x + px * rr * side, u.y + py * rr * side, u.r || 10), okB = pointClear(u.x - px * rr * side, u.y - py * rr * side, u.r || 10);
+      if (!okA && okB) side = -side;
+      u.kvx += (px * side * 1 + hx * 0.35) * 120; u.kvy += (py * side * 1 + hy * 0.35) * 120; u.path = null;
+    }
     if (u.wdN === 3 && STUCK_LOG.length < 500) STUCK_LOG.push({ t: G.time, kind: u.kind, x: Math.round(u.x), y: Math.round(u.y) });
   } else u.wdN = 0;
   u.wdT = 0; u.wdX = u.x; u.wdY = u.y;
