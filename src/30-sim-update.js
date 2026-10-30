@@ -149,7 +149,10 @@ function updateUnit(u, dt) {
   if (tgt) {
     var rng = aaRange(u) + (tgt.r || 0) + u.r * 0.5;
     var dd = dist(u, tgt);
-    if (dd <= rng) {
+    /* Hysteresis: a unit already in range keeps firing until it is shoved a little past the edge. Without it, crowd pushes
+       knock front-liners just out of range every few frames, so they step in, get pushed out, and restart their wind-up. */
+    if (dd <= rng + (u.inR === tgt ? Math.max(10, u.r) : 0)) {
+      u.inR = tgt;
       u.path = null;
       if (u.kind === 'minion' && WALK_SHOOT && u.move && spd > 0) { wantMove = true; stepToward(u, u.move.x, u.move.y, spd * dt, 4); }
       if (Math.abs(tgt.x - u.x) > 4) u.facing = tgt.x < u.x ? -1 : 1;
@@ -158,7 +161,7 @@ function updateUnit(u, dt) {
         u.wind.t += dt;
         if (u.wind.t >= u.wind.dur) { u.wind = null; attack(u, tgt); }
       }
-    } else { u.wind = null; if (spd > 0) { wantMove = true; var gx = tgt.x, gy = tgt.y;
+    } else { u.wind = null; u.inR = null; if (spd > 0) { wantMove = true; var gx = tgt.x, gy = tgt.y;
         /* Vehicles chasing a hero walk to the lane point beside it, not onto the hero: a hero at the field edge would otherwise pin them there. */
         if (u.kind === 'minion' && (u.type === 'jeep' || u.type === 'tank') && tgt.kind === 'hero' && u.lane != null) { var hq0 = laneProj(tgt, u.lane); var lp = lanePt(hq0.t, clamp(hq0.off, -60, 60), u.lane); gx = lp.x; gy = lp.y; }
         stepToward(u, gx, gy, spd * dt, rng * 0.9); } }
@@ -268,9 +271,9 @@ function minionAI(m, dt) {
   G.units.forEach(function (e) {
     if (e.team === m.team || e.dead || !visibleTo(e, m.team)) return;
     var d = dist(e, m) + (e.kind === 'hero' ? 160 : 0);
-    if (d < 460 && d < bd) { bd = d; best = e; }
+    if (d < 460 && d < bd && (dist(e, m) <= aaRange(m) + (e.r || 0) || walkLine(m.x, m.y, e.x, e.y))) { bd = d; best = e; }
   });
-  if (!best) G.structs.forEach(function (s) { if (s.team !== m.team && targetable(s) && dist(s, m) < 460 + s.r) best = s; });
+  if (!best) G.structs.forEach(function (s) { if (s.team !== m.team && targetable(s) && dist(s, m) < 460 + s.r && (dist(s, m) <= aaRange(m) + s.r || walkLine(m.x, m.y, s.x, s.y))) best = s; });
   m.target = best;
   if (!best || WALK_SHOOT) {
     var q = laneProj(m, m.lane), nt = q.t + (m.team === 0 ? 0.08 : -0.08);
@@ -278,6 +281,14 @@ function minionAI(m, dt) {
   }
 }
 
+/* True when the straight line between two points stays on walkable ground. Minions only pick targets they can walk straight
+   to: a unit just across a hill in the next lane is close as the crow flies but a long detour away, and chasing it made
+   minions wander off, lose it, come back and pick it again. Targets already in firing range are always fine. */
+function walkLine(ax, ay, bx, by) {
+  var L = vlen(bx - ax, by - ay), n = Math.max(1, Math.ceil(L / 30));
+  for (var i = 1; i < n; i++) { var f = i / n; if (fieldSD(ax + (bx - ax) * f, ay + (by - ay) * f) < 0) return false; }
+  return true;
+}
 function botAI(u) {
   var mh = maxHp(u);
   if (u.hp < mh * 0.28) u.retreat = true;
@@ -291,12 +302,18 @@ function botAI(u) {
   var myOut = G.structs.filter(function (s) { return s.team === u.team && !s.dead && s.kind === 'outpost' && s.lane === lane; }).map(function (s) { return u.team === 0 ? s.t : 1 - s.t; });
   var hold = myOut.length ? Math.max.apply(null, myOut) - 0.03 : 0.08;
   var want = front > 0 ? Math.max(hold, front - 0.025) : hold;
+  /* The front minion dies and respawns constantly, so the raw spot jumps back and forth along the lane; the bot eases its spot
+     toward it instead (a lane-length step of 0.012 per think, ~ a hero's walking pace), so it no longer walks out and straight back. */
+  if (u.wantS == null || u.wantLane !== lane) { u.wantS = want; u.wantLane = lane; } else u.wantS += clamp(want - u.wantS, -0.012, 0.012);
+  want = u.wantS;
+  /* after backing off an uncovered turret the bot stays wary of it for a moment (a wider ring), instead of stepping back in next think */
+  var wary = u.waryT != null && G.time < u.waryT ? 160 : 60;
   var danger = G.structs.find(function (s) {
     if (s.team === u.team || s.dead) return false;
-    if (dist(s, u) > s.range + 60) return false;
+    if (dist(s, u) > s.range + wary) return false;
     return !G.units.some(function (m) { return m.team === u.team && m.kind === 'minion' && !m.dead && dist(m, s) < s.range; });
   });
-  if (danger) { u.target = null; var q0 = laneProj(u, lane); u.move = freePoint(lanePt(q0.t + (u.team === 0 ? -0.06 : 0.06), clamp(q0.off, -60, 60), lane), u.r); return; }
+  if (danger) { u.waryT = G.time + 1.5; u.target = null; var q0 = laneProj(u, lane); u.move = freePoint(lanePt(q0.t + (u.team === 0 ? -0.06 : 0.06), clamp(q0.off, -60, 60), lane), u.r); return; }
   if (passive) { u.target = null; u.move = freePoint(lanePt(u.team === 0 ? want : 1 - want, 0, lane), u.r); return; }
   var r = aaRange(u), best = null, bs = -1e9;
   G.units.forEach(function (e) {

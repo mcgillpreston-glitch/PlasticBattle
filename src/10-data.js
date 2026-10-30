@@ -250,7 +250,13 @@ function fieldSD(x, y) {
   for (var i = 0; i < list.length; i++) {
     var c = list[i];
     if (x < c.minx - 200 || x > c.maxx + 200 || y < c.miny - 200 || y > c.maxy + 200) continue;
-    var v = c.r - capDist(c, x, y); if (v > best) best = v;
+    /* same result as c.r - capDist(c, x, y), but the square root is only taken when this capsule can beat the best so far */
+    var lim = c.r - best; if (lim <= 0) continue;
+    var dx = c.bx - c.ax, dy = c.by - c.ay, L2 = dx * dx + dy * dy, t = L2 ? ((x - c.ax) * dx + (y - c.ay) * dy) / L2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    var ex = x - c.ax - dx * t, ey = y - c.ay - dy * t, d2 = ex * ex + ey * ey;
+    if (d2 >= lim * lim) continue;
+    best = c.r - Math.sqrt(d2);
   }
   return best;
 }

@@ -557,7 +557,7 @@ h1, h2 { text-shadow: 0 2px 12px rgba(0,0,0,0.6); }
         <label><input type="checkbox" id="mSound" checked> Sound</label>
         <label class="field">Volume <input type="range" id="mVol" min="0" max="100" value="55"></label>
         <label><input type="checkbox" id="mMusicOff" hidden></label>
-        <label><input type="checkbox" id="mLowRes"> Low resolution (faster on weak GPUs)</label>
+        <label><input type="checkbox" id="mLowRes"> Low resolution (faster on weak GPUs; turns on by itself if the frame rate drops)</label>
         <label><input type="checkbox" id="mFps" checked> Show FPS and range control</label>
         <label><input type="checkbox" id="mShake" checked> Screen shake</label>
         <label class="field">Edge scroll (mouse at the screen edge pans the map; 0 = off) <input type="range" id="mEdge" min="0" max="100" value="50"></label>
@@ -849,7 +849,13 @@ function fieldSD(x, y) {
   for (var i = 0; i < list.length; i++) {
     var c = list[i];
     if (x < c.minx - 200 || x > c.maxx + 200 || y < c.miny - 200 || y > c.maxy + 200) continue;
-    var v = c.r - capDist(c, x, y); if (v > best) best = v;
+    /* same result as c.r - capDist(c, x, y), but the square root is only taken when this capsule can beat the best so far */
+    var lim = c.r - best; if (lim <= 0) continue;
+    var dx = c.bx - c.ax, dy = c.by - c.ay, L2 = dx * dx + dy * dy, t = L2 ? ((x - c.ax) * dx + (y - c.ay) * dy) / L2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    var ex = x - c.ax - dx * t, ey = y - c.ay - dy * t, d2 = ex * ex + ey * ey;
+    if (d2 >= lim * lim) continue;
+    best = c.r - Math.sqrt(d2);
   }
   return best;
 }
@@ -1573,13 +1579,33 @@ function ensureNav() {
   NAV.nt = Math.floor(MAP.W / c) + 1; NAV.no = Math.floor(MAP.H / c) + 1;
   var N = NAV.nt * NAV.no, fresh = !NAV.sd || NAV.sd.length !== N;
   if (fresh) { NAV.sd = new Float32Array(N); NAV.fsd = new Float32Array(N); NAV.px = new Float32Array(N); NAV.py = new Float32Array(N); NAV.g = new Float32Array(N); NAV.came = new Int32Array(N); NAV.stamp = new Int32Array(N); NAV.closed = new Int32Array(N); NAV.cur = 0; }
-  var bl = G.blockers;
-  for (var i = 0; i < NAV.nt; i++) for (var j = 0; j < NAV.no; j++) {
-    var k = i * NAV.no + j, x = i * c, y = j * c;
-    if (fresh) { NAV.px[k] = x; NAV.py[k] = y; NAV.fsd[k] = fieldSD(x, y); }
-    var m = NAV.fsd[k];
+  var bl = G.blockers, keys = {}, changed = [], had = !!NAV.bkeys, bk = function (o) { return [o.x, o.y, o.r, o.ax, o.ay, o.bx, o.by].join(','); };
+  bl.forEach(function (o) { var kk = bk(o); keys[kk] = o; if (!fresh && NAV.bkeys && !NAV.bkeys[kk]) changed.push(o); });
+  if (!fresh && NAV.bkeys) for (var ok in NAV.bkeys) if (!keys[ok]) changed.push(NAV.bkeys[ok]);
+  NAV.bkeys = keys;
+  function cellAt(i2, j2) {
+    var k = i2 * NAV.no + j2, m = NAV.fsd[k], x = NAV.px[k], y = NAV.py[k];
     if (m > -60) for (var b = 0; b < bl.length; b++) { var d = surfDist(bl[b], x, y); if (d < m) m = d; }
     NAV.sd[k] = m;
+  }
+  if (fresh || !had || changed.length > 8) {
+    var mx = 0;
+    for (var i = 0; i < NAV.nt; i++) for (var j = 0; j < NAV.no; j++) {
+      var k = i * NAV.no + j;
+      if (fresh) { NAV.px[k] = i * c; NAV.py[k] = j * c; NAV.fsd[k] = fieldSD(i * c, j * c); if (NAV.fsd[k] > mx) mx = NAV.fsd[k]; }
+      cellAt(i, j);
+    }
+    if (fresh) NAV.fmax = mx;
+  } else {
+    /* Only a turret or building came or went: a blocker can only lower a cell's clearance where it is nearer than the field
+       edge, so just the cells within (its size + the widest field clearance) of it need redoing. Same result as a full rebuild. */
+    changed.forEach(function (o) {
+      var ax = o.ax == null ? o.x : Math.min(o.ax, o.bx), bx = o.ax == null ? o.x : Math.max(o.ax, o.bx);
+      var ay = o.ax == null ? o.y : Math.min(o.ay, o.by), by = o.ax == null ? o.y : Math.max(o.ay, o.by), ext = o.r + (o.h || 0) + NAV.fmax + c;
+      var i0 = Math.max(0, Math.floor((ax - ext) / c)), i1 = Math.min(NAV.nt - 1, Math.ceil((bx + ext) / c));
+      var j0 = Math.max(0, Math.floor((ay - ext) / c)), j1 = Math.min(NAV.no - 1, Math.ceil((by + ext) / c));
+      for (var i = i0; i <= i1; i++) for (var j = j0; j <= j1; j++) cellAt(i, j);
+    });
   }
   NAV.built = NAV.ver;
 }
@@ -1612,6 +1638,10 @@ function findPath(sx, sy, gx, gy, r) {
     if (hk.length) { hk[0] = lk; hf[0] = lf; var i = 0, n = hk.length; for (;;) { var l = 2 * i + 1, r2 = l + 1, m = i; if (l < n && hf[l] < hf[m]) m = l; if (r2 < n && hf[r2] < hf[m]) m = r2; if (m === i) break; var tk = hk[m]; hk[m] = hk[i]; hk[i] = tk; var tf = hf[m]; hf[m] = hf[i]; hf[i] = tf; i = m; } }
     return top;
   }
+  /* Octile distances on the grid (no square roots), and a heuristic weighted by 1.25: the search heads for the goal instead
+     of flooding every lane around it. Routes stay within 25% of the shortest (in practice a few %) and are straightened below. */
+  var CS = NAV.cell, D2 = CS * Math.SQRT2, gi = (g / no) | 0, gj = g - gi * no, HW = 1.25;
+  function heur(k2) { var a2 = (k2 / no) | 0, b2 = k2 - a2 * no, x2 = a2 > gi ? a2 - gi : gi - a2, y2 = b2 > gj ? b2 - gj : gj - b2; return HW * (x2 > y2 ? CS * (x2 - y2) + D2 * y2 : CS * (y2 - x2) + D2 * x2); }
   st[s] = stamp; gs[s] = 0; came[s] = -1; push(s, 0);
   var found = false, iter = 0;
   while (hk.length) {
@@ -1625,8 +1655,8 @@ function findPath(sx, sy, gx, gy, r) {
       var ni = ci + di, nj = cj + dj; if (ni < 0 || nj < 0 || ni >= nt || nj >= no) continue;
       var nk = ni * no + nj; if (sd[nk] < rr || cl[nk] === stamp) continue;
       if (di && dj && (sd[ci * no + nj] < rr || sd[ni * no + cj] < rr)) continue;
-      var ng = gs[k] + vlen(px[nk] - px[k], py[nk] - py[k]);
-      if (st[nk] !== stamp || ng < gs[nk]) { st[nk] = stamp; gs[nk] = ng; came[nk] = k; push(nk, ng + vlen(px[nk] - px[g], py[nk] - py[g])); }
+      var ng = gs[k] + (di && dj ? D2 : CS);
+      if (st[nk] !== stamp || ng < gs[nk]) { st[nk] = stamp; gs[nk] = ng; came[nk] = k; push(nk, ng + heur(nk)); }
     }
   }
   if (!found) return null;
@@ -1634,10 +1664,18 @@ function findPath(sx, sy, gx, gy, r) {
   var pts = [{ x: sx, y: sy }]; cells.forEach(function (c2) { pts.push({ x: px[c2], y: py[c2] }); });
   if (pointClear(gx, gy, r)) pts.push({ x: gx, y: gy });
   var out = [], a = 0;
-  while (a < pts.length - 1) {
-    var nxt = a + 1;
-    for (var b = pts.length - 1; b > a + 1; b--) if (segClear(pts[a].x, pts[a].y, pts[b].x, pts[b].y, r - 0.5)) { nxt = b; break; }
-    out.push(pts[nxt]); a = nxt;
+  /* String-pull: from each kept corner, jump as far along the path as is in clear sight. The reach is found by doubling the
+     jump until sight fails, then halving back, so a long route costs a few sight checks per corner. (The old version tested
+     every later point from the far end: tens of ms on long routes, enough to stall a server tick.) */
+  var L = pts.length;
+  function vis(i, j) { return segClear(pts[i].x, pts[i].y, pts[j].x, pts[j].y, r - 0.5); }
+  while (a < L - 1) {
+    var lo = a + 1, step = 1;
+    while (lo + step < L && vis(a, lo + step)) { lo += step; step *= 2; }
+    var hi = Math.min(L - 1, lo + step) ;
+    while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (vis(a, mid)) lo = mid; else hi = mid; }
+    if (hi !== lo && hi < L && vis(a, hi)) lo = hi;
+    out.push(pts[lo]); a = lo;
   }
   return out;
 }
@@ -1654,9 +1692,9 @@ function stepToward(u, x, y, step, stopAt) {
   else { straight = segClear(u.x, u.y, x, y, u.r - 1); u.scAt = G.time; }
   if (straight) u.path = null;
   else {
-    var need = !u.path || u.pathVer !== NAV.ver || !u.pathGoal || vlen(u.pathGoal.x - x, u.pathGoal.y - y) > 32 || u.repath;
+    var need = !u.path || u.pathVer !== NAV.ver || !u.pathGoal || vlen(u.pathGoal.x - x, u.pathGoal.y - y) > 48 || u.repath;
     if (need && !(u.pathCd > 0)) {
-      u.path = findPath(u.x, u.y, x, y, u.r); u.pathGoal = { x: x, y: y }; u.pathVer = NAV.ver; u.repath = false; u.pathCd = u.path ? 0.05 : 0.3;
+      u.path = findPath(u.x, u.y, x, y, u.r); u.pathGoal = { x: x, y: y }; u.pathVer = NAV.ver; u.repath = false; u.pathCd = u.path ? 0.15 : 0.3;
     }
     var P = u.path;
     if (P && P.length) {
@@ -1681,7 +1719,17 @@ function watchdog(u, dt, want, spd) {
   if (u.wdT < 0.5) return;
   if (vlen(u.x - u.wdX, u.y - u.wdY) < spd * 0.5 * 0.2) {
     u.wdN = (u.wdN || 0) + 1; u.repath = true; u.pathCd = 0;
-    if (u.wdN >= 2) { var a = rnd(0, Math.PI * 2); u.kvx += Math.cos(a) * 170; u.kvy += Math.sin(a) * 170; u.path = null; }
+    if (u.wdN >= 2) {
+      /* unstick with a sidestep relative to where the unit is heading, toward the clearer side (alternating when both are
+         clear), with a slight forward lean. A random kick often sent units backwards, which read as twitching. */
+      var gl = (u.path && u.path[0]) || u.move || (u.target && !u.target.dead ? u.target : null), hx, hy;
+      if (gl) { hx = gl.x - u.x; hy = gl.y - u.y; } else { var a0 = rnd(0, Math.PI * 2); hx = Math.cos(a0); hy = Math.sin(a0); }
+      var hl = vlen(hx, hy) || 1; hx /= hl; hy /= hl;
+      var px = -hy, py = hx, rr = (u.r || 10) * 2.2, side = (u.wdN % 2) ? 1 : -1;
+      var okA = pointClear(u.x + px * rr * side, u.y + py * rr * side, u.r || 10), okB = pointClear(u.x - px * rr * side, u.y - py * rr * side, u.r || 10);
+      if (!okA && okB) side = -side;
+      u.kvx += (px * side * 1 + hx * 0.35) * 120; u.kvy += (py * side * 1 + hy * 0.35) * 120; u.path = null;
+    }
     if (u.wdN === 3 && STUCK_LOG.length < 500) STUCK_LOG.push({ t: G.time, kind: u.kind, x: Math.round(u.x), y: Math.round(u.y) });
   } else u.wdN = 0;
   u.wdT = 0; u.wdX = u.x; u.wdY = u.y;
@@ -2006,7 +2054,10 @@ function updateUnit(u, dt) {
   if (tgt) {
     var rng = aaRange(u) + (tgt.r || 0) + u.r * 0.5;
     var dd = dist(u, tgt);
-    if (dd <= rng) {
+    /* Hysteresis: a unit already in range keeps firing until it is shoved a little past the edge. Without it, crowd pushes
+       knock front-liners just out of range every few frames, so they step in, get pushed out, and restart their wind-up. */
+    if (dd <= rng + (u.inR === tgt ? Math.max(10, u.r) : 0)) {
+      u.inR = tgt;
       u.path = null;
       if (u.kind === 'minion' && WALK_SHOOT && u.move && spd > 0) { wantMove = true; stepToward(u, u.move.x, u.move.y, spd * dt, 4); }
       if (Math.abs(tgt.x - u.x) > 4) u.facing = tgt.x < u.x ? -1 : 1;
@@ -2015,7 +2066,7 @@ function updateUnit(u, dt) {
         u.wind.t += dt;
         if (u.wind.t >= u.wind.dur) { u.wind = null; attack(u, tgt); }
       }
-    } else { u.wind = null; if (spd > 0) { wantMove = true; var gx = tgt.x, gy = tgt.y;
+    } else { u.wind = null; u.inR = null; if (spd > 0) { wantMove = true; var gx = tgt.x, gy = tgt.y;
         /* Vehicles chasing a hero walk to the lane point beside it, not onto the hero: a hero at the field edge would otherwise pin them there. */
         if (u.kind === 'minion' && (u.type === 'jeep' || u.type === 'tank') && tgt.kind === 'hero' && u.lane != null) { var hq0 = laneProj(tgt, u.lane); var lp = lanePt(hq0.t, clamp(hq0.off, -60, 60), u.lane); gx = lp.x; gy = lp.y; }
         stepToward(u, gx, gy, spd * dt, rng * 0.9); } }
@@ -2125,9 +2176,9 @@ function minionAI(m, dt) {
   G.units.forEach(function (e) {
     if (e.team === m.team || e.dead || !visibleTo(e, m.team)) return;
     var d = dist(e, m) + (e.kind === 'hero' ? 160 : 0);
-    if (d < 460 && d < bd) { bd = d; best = e; }
+    if (d < 460 && d < bd && (dist(e, m) <= aaRange(m) + (e.r || 0) || walkLine(m.x, m.y, e.x, e.y))) { bd = d; best = e; }
   });
-  if (!best) G.structs.forEach(function (s) { if (s.team !== m.team && targetable(s) && dist(s, m) < 460 + s.r) best = s; });
+  if (!best) G.structs.forEach(function (s) { if (s.team !== m.team && targetable(s) && dist(s, m) < 460 + s.r && (dist(s, m) <= aaRange(m) + s.r || walkLine(m.x, m.y, s.x, s.y))) best = s; });
   m.target = best;
   if (!best || WALK_SHOOT) {
     var q = laneProj(m, m.lane), nt = q.t + (m.team === 0 ? 0.08 : -0.08);
@@ -2135,6 +2186,14 @@ function minionAI(m, dt) {
   }
 }
 
+/* True when the straight line between two points stays on walkable ground. Minions only pick targets they can walk straight
+   to: a unit just across a hill in the next lane is close as the crow flies but a long detour away, and chasing it made
+   minions wander off, lose it, come back and pick it again. Targets already in firing range are always fine. */
+function walkLine(ax, ay, bx, by) {
+  var L = vlen(bx - ax, by - ay), n = Math.max(1, Math.ceil(L / 30));
+  for (var i = 1; i < n; i++) { var f = i / n; if (fieldSD(ax + (bx - ax) * f, ay + (by - ay) * f) < 0) return false; }
+  return true;
+}
 function botAI(u) {
   var mh = maxHp(u);
   if (u.hp < mh * 0.28) u.retreat = true;
@@ -2148,12 +2207,18 @@ function botAI(u) {
   var myOut = G.structs.filter(function (s) { return s.team === u.team && !s.dead && s.kind === 'outpost' && s.lane === lane; }).map(function (s) { return u.team === 0 ? s.t : 1 - s.t; });
   var hold = myOut.length ? Math.max.apply(null, myOut) - 0.03 : 0.08;
   var want = front > 0 ? Math.max(hold, front - 0.025) : hold;
+  /* The front minion dies and respawns constantly, so the raw spot jumps back and forth along the lane; the bot eases its spot
+     toward it instead (a lane-length step of 0.012 per think, ~ a hero's walking pace), so it no longer walks out and straight back. */
+  if (u.wantS == null || u.wantLane !== lane) { u.wantS = want; u.wantLane = lane; } else u.wantS += clamp(want - u.wantS, -0.012, 0.012);
+  want = u.wantS;
+  /* after backing off an uncovered turret the bot stays wary of it for a moment (a wider ring), instead of stepping back in next think */
+  var wary = u.waryT != null && G.time < u.waryT ? 160 : 60;
   var danger = G.structs.find(function (s) {
     if (s.team === u.team || s.dead) return false;
-    if (dist(s, u) > s.range + 60) return false;
+    if (dist(s, u) > s.range + wary) return false;
     return !G.units.some(function (m) { return m.team === u.team && m.kind === 'minion' && !m.dead && dist(m, s) < s.range; });
   });
-  if (danger) { u.target = null; var q0 = laneProj(u, lane); u.move = freePoint(lanePt(q0.t + (u.team === 0 ? -0.06 : 0.06), clamp(q0.off, -60, 60), lane), u.r); return; }
+  if (danger) { u.waryT = G.time + 1.5; u.target = null; var q0 = laneProj(u, lane); u.move = freePoint(lanePt(q0.t + (u.team === 0 ? -0.06 : 0.06), clamp(q0.off, -60, 60), lane), u.r); return; }
   if (passive) { u.target = null; u.move = freePoint(lanePt(u.team === 0 ? want : 1 - want, 0, lane), u.r); return; }
   var r = aaRange(u), best = null, bs = -1e9;
   G.units.forEach(function (e) {
@@ -2331,9 +2396,21 @@ function botPickOrder(u) {
 /* ---------------- Rendering ---------------- */
 var cv = document.getElementById('game'), ctx = cv.getContext('2d');
 var mini = document.getElementById('miniCv'), mctx = mini.getContext('2d');
+/* Automatic render resolution: on a high-DPI screen the canvas starts at 1.5x; if frames then average over 22 ms (under about
+   45 fps) for two seconds of play, it drops to 1x, which roughly doubles the frame rate. Ticking or unticking the Esc-menu
+   low-resolution box overrides it. */
+var autoRes = { low: false, off: false, acc: 0, n: 0, grace: 3 };
+function autoResTick(ms, playing) {
+  if (autoRes.low || autoRes.off || opts.lowRes || DPR <= 1 || !playing || document.hidden) { autoRes.acc = autoRes.n = 0; return; }
+  if (autoRes.grace > 0) { autoRes.grace -= ms / 1000; return; }
+  autoRes.acc += ms; autoRes.n++;
+  if (autoRes.acc < 2000) return;
+  var avg = autoRes.acc / autoRes.n; autoRes.acc = autoRes.n = 0;
+  if (avg > 22) { autoRes.low = true; resize(); showToast('Lowered render resolution for a smoother frame rate (Esc menu to change)', 4); }
+}
 var DPR = 1, VW = 0, VH = 0, terrain = null, grainCv = null, blendOK = { saturation: false, overlay: false };
 function resize() {
-  DPR = Math.min(opts.lowRes ? 1 : 1.5, window.devicePixelRatio || 1);
+  DPR = Math.min(opts.lowRes || autoRes.low ? 1 : 1.5, window.devicePixelRatio || 1);
   VW = cv.clientWidth; VH = cv.clientHeight;
   cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
   SIDE_W = 0;
@@ -3576,7 +3653,7 @@ function openMenu() {
   document.getElementById('mCopy').hidden = !(NET.mode === 'online' && NETC.room);
   document.getElementById('mSound').checked = !!opts.sound;
   document.getElementById('mVol').value = Math.round((opts.volume == null ? 0.55 : opts.volume) * 100);
-  document.getElementById('mLowRes').checked = !!opts.lowRes;
+  document.getElementById('mLowRes').checked = !!(opts.lowRes || autoRes.low);
   document.getElementById('mFps').checked = !document.getElementById('dev').hidden;
   document.getElementById('mShake').checked = !opts.noShake;
   document.getElementById('mEdge').value = opts.edge == null ? 50 : opts.edge;
@@ -3588,7 +3665,7 @@ function closeMenu() { menuEl.hidden = true; }
 document.getElementById('mResume').addEventListener('click', closeMenu);
 document.getElementById('mSound').addEventListener('change', function (e) { opts.sound = e.target.checked; document.getElementById('dSound').checked = opts.sound; lsSet('pf_sound', opts.sound ? '1' : '0'); });
 document.getElementById('mVol').addEventListener('input', function (e) { opts.volume = Number(e.target.value) / 100; if (AMaster) AMaster.gain.value = opts.volume; lsSet('pf_volume', String(opts.volume)); });
-document.getElementById('mLowRes').addEventListener('change', function (e) { opts.lowRes = e.target.checked; lsSet('pf_lowres', opts.lowRes ? '1' : '0'); resize(); });
+document.getElementById('mLowRes').addEventListener('change', function (e) { opts.lowRes = e.target.checked; lsSet('pf_lowres', opts.lowRes ? '1' : '0'); if (!opts.lowRes) { autoRes.low = false; autoRes.off = true; } resize(); });
 document.getElementById('mFps').addEventListener('change', function (e) { document.getElementById('dev').hidden = !e.target.checked; lsSet('pf_fps', e.target.checked ? '1' : '0'); });
 document.getElementById('mShake').addEventListener('change', function (e) { opts.noShake = !e.target.checked; lsSet('pf_shake', e.target.checked ? '1' : '0'); });
 document.getElementById('mEdge').addEventListener('input', function (e) { opts.edge = Number(e.target.value); lsSet('pf_edge', String(opts.edge)); });
@@ -3671,7 +3748,8 @@ document.getElementById('again').addEventListener('click', function () { if (NET
 /* ---------------- Loop ---------------- */
 var last = performance.now(), fpsAcc = 0, fpsN = 0;
 function frame(now) {
-  var raw = Math.min(0.05, (now - last) / 1000); last = now;
+  var frameMs = now - last, raw = Math.min(0.05, frameMs / 1000); last = now;
+  autoResTick(frameMs, !!(G && G.player && draftEl.hidden && menuEl.hidden && !opts.pause));
   fpsAcc += raw; fpsN++;
   if (fpsAcc > 0.5) { document.getElementById('fps').textContent = Math.round(fpsN / fpsAcc) + ' fps'; fpsAcc = 0; fpsN = 0; }
   if (NET.mode === 'local' && G && !opts.pause && draftEl.hidden && ordersModal.hidden && swapModal.hidden && menuEl.hidden) {
@@ -3733,7 +3811,7 @@ function start() {
 }
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(start, start); else start();
 
-window.__PF = { get G() { return G; }, get NET() { return NET; }, predDebug: predDebug, cmdTarget: cmdTarget, cmdMove: cmdMove, cmdCast: cmdCast, clearDir: clearDir, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };
+window.__PF = { get G() { return G; }, get autoRes() { return autoRes; }, get DPR() { return DPR; }, get NET() { return NET; }, predDebug: predDebug, cmdTarget: cmdTarget, cmdMove: cmdMove, cmdCast: cmdCast, clearDir: clearDir, netSend: function (o) { netSend(o); }, update: update, newGame: newGame, presentLocal: presentLocal, draw: draw, THERM: THERM, cam: cam, opts: opts, HEROES: HEROES, lanePt: lanePt, laneProj: laneProj, clampLane: clampLane, fountain: fountain, addMinion: addMinion, aaRange: aaRange, moveSpeed: moveSpeed, MAP: MAP, LANES: LANES, FIELD_CAPS: FIELD_CAPS, BRUSH: BRUSH, fieldSD: fieldSD, clampField: clampField, nearestLane: nearestLane, PROPS: PROPS, unitH: unitH, findPath: findPath, segClear: segClear, pointClear: pointClear, STUCK_LOG: STUCK_LOG, ASSETS: ASSETS };
 
 /* ===== 65-shop.js ===== */
 /* Supply shop: P (or clicking your own HQ) opens and closes it at any time. Buying and HQ stash
